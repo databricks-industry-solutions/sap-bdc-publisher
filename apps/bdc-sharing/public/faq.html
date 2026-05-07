@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FAQ — Data Sharing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F4F6FA; --bg-elev: #FFFFFF; --bg-tile: #FFFFFF;
+    --border: #E4E7EC; --border-strong: #CFD4DC;
+    --text: #0F172A; --text-muted: #64748B;
+    --accent: #FF3621; --accent-hover: #E5301D; --accent-dim: #FFE3DD;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --radius-lg: 20px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  body { background: radial-gradient(1200px 500px at 50% -200px, rgba(255, 54, 33, 0.05), transparent 70%), var(--bg); min-height: 100vh; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .app { min-height: 100vh; display: flex; flex-direction: column; }
+  .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 40px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.85); backdrop-filter: saturate(180%) blur(8px); position: sticky; top: 0; z-index: 20; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-logo { width: 36px; height: 36px; background: linear-gradient(135deg, #FF3621, #FF6B47); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 19px; box-shadow: 0 3px 10px rgba(255,54,33,0.28); }
+  .brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.015em; }
+  .brand-sub { font-size: 12px; color: var(--text-muted); margin-left: 4px; font-weight: 400; }
+  .user-badge { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 6px 10px 6px 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
+  .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #FF3621, #FF6B47); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; }
+  .user-email { color: var(--text-muted); font-size: 12px; }
+  .header-actions { display: flex; align-items: center; gap: 16px; }
+  .header-actions a { color: var(--text-muted); font-size: 13px; font-weight: 500; transition: color 0.15s; }
+  .header-actions a:hover { color: var(--text); text-decoration: none; }
+
+  .main { max-width: 880px; margin: 0 auto; padding: 48px 40px 80px; width: 100%; }
+  .welcome h1 { font-size: 32px; font-weight: 700; margin: 0 0 12px; letter-spacing: -0.028em; }
+  .welcome p { color: var(--text-muted); margin: 0 0 32px; max-width: 760px; font-size: 14.5px; }
+
+  .panel { background: var(--bg-tile); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 8px 28px; box-shadow: var(--shadow-sm); }
+  details { border-bottom: 1px solid var(--border); padding: 16px 0; }
+  details:last-child { border-bottom: none; }
+  details > summary { cursor: pointer; list-style: none; font-weight: 600; font-size: 15px; color: var(--text); padding-right: 28px; position: relative; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::after {
+    content: '+'; position: absolute; right: 0; top: -1px; font-size: 22px;
+    color: var(--text-muted); font-weight: 300; line-height: 1;
+    transition: transform 0.2s;
+  }
+  details[open] > summary::after { content: '−'; }
+  details > summary:hover { color: var(--accent); }
+  details > div { margin-top: 12px; color: var(--text); font-size: 13.5px; line-height: 1.65; }
+  details p { margin: 8px 0; }
+  details p:first-child { margin-top: 0; }
+  details p:last-child { margin-bottom: 0; }
+  details ul { margin: 8px 0; padding-left: 20px; }
+  details li { margin: 4px 0; }
+  details code { font-family: 'Menlo', monospace; font-size: 12.5px; background: #F3F4F6; padding: 2px 6px; border-radius: 4px; color: #1F2937; }
+  details pre { background: #0F172A; color: #E2E8F0; padding: 12px 14px; border-radius: 8px; overflow-x: auto; margin: 10px 0; }
+  details pre code { background: transparent; color: inherit; padding: 0; font-size: 12.5px; }
+  details .muted { color: var(--text-muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="brand">
+      <div class="brand-logo">D</div>
+      <div><div class="brand-name">Data Sharing <span class="brand-sub">FAQ</span></div></div>
+    </div>
+    <div class="header-actions">
+      <a href="/" title="Back to app">← Back to app</a>
+      <a href="/activity.html" title="Open activity log">Activity</a>
+      <a href="/docs.html" title="Open documentation" target="_blank">Documentation</a>
+      <a href="/logout" title="Sign out">Sign out</a>
+      <div id="user-badge" class="user-badge"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="welcome">
+      <h1>FAQ</h1>
+      <p>Everything that's worth knowing before you stare at a stuck publish job. Click any question to expand.</p>
+    </section>
+
+    <section class="panel">
+      <details>
+        <summary>Who runs which step?</summary>
+        <div>
+          <p>The app uses <strong>two identities</strong> simultaneously — there is no single "as the user" or "as the SP".</p>
+          <ul>
+            <li><strong>You (via OBO token)</strong> — every read on Unity Catalog (<code>SHOW SHARES</code>, <code>SHOW RECIPIENTS</code>, <code>DESCRIBE</code>, <code>SHOW GRANTS</code>, <code>DESCRIBE TABLE</code>, information_schema PK lookup) and the privilege mutations on the share itself: <code>GRANT SELECT ON SHARE</code> (publish) and <code>REVOKE SELECT ON SHARE</code> (delete <code>/finalize</code>). UC enforces your ownership / ALTER privilege when these run.</li>
+            <li><strong>App service principal</strong> — listing / starting SQL warehouses, submitting and polling the BDC publish/delete Job, reading the app's own deployment path. The Job itself runs <em>as the SP</em>: it only calls the BDC SDK, which doesn't depend on user identity.</li>
+          </ul>
+          <p>The audit trail stays coherent: <code>system.access.audit</code> shows GRANT/REVOKE attributed to you, the BDC SDK calls attributed to the SP. The Activity tab merges both views.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Why does the app sometimes ask me to "Grant access to SP"?</summary>
+        <div>
+          <p>The BDC publish Job runs as the app's service principal. For it to read the schemas of your share's source tables (to build the CSN) and serve data through Delta Sharing, the SP needs <code>USE CATALOG</code> on the catalog, <code>USE SCHEMA</code> on each schema, and <code>SELECT</code> on each table.</p>
+          <p>The Review tile detects the catalogs your share pulls from and offers a one-click "Grant access to SP" button. The GRANTs run as <em>you</em> via OBO, so you must hold MANAGE (or ownership) on the catalog. Idempotent — safe to re-run.</p>
+          <p>If you don't hold MANAGE, ask the catalog owner to run the same grants.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>I got "GRANT failed: you need ALTER on the share". Now what?</summary>
+        <div>
+          <p>You don't own (or hold ALTER on) the share you're trying to publish. The app fails fast <strong>before</strong> submitting any Job, so there is no partial state to clean up.</p>
+          <p>Options: have the share owner publish it, or have them grant you ALTER on the share with <code>GRANT ALTER ON SHARE &lt;share&gt; TO `your.email@…`</code>. Direct grants take effect immediately — refresh the dropdown.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Publish fails with "Secret does not exist with scope: sap-bdc-connect-sdk". What's wrong?</summary>
+        <div>
+          <p>The recipient you're publishing to was created with <code>authentication_type = TOKEN</code> instead of <code>OIDC_FEDERATION</code>. Confirm with <code>DESCRIBE RECIPIENT &lt;recipient-name&gt;</code>.</p>
+          <p>The BDC Connect SDK takes two different code paths depending on the recipient's auth type. <code>OIDC_FEDERATION</code> recipients carry their BDC tenant binding inline — the SDK handles auth automatically. <code>TOKEN</code> recipients don't carry that binding, so the SDK falls back to reading tenant config from a workspace secret scope literally named <code>sap-bdc-connect-sdk</code> (with keys <code>api_url</code> and <code>tenant</code>). If that scope doesn't exist in the workspace, you get the error above.</p>
+          <p><strong>Recommended fix:</strong> drop the recipient and recreate it as <code>OIDC_FEDERATION</code> via the SAP BDC onboarding flow. No workspace bootstrap needed and it joins the existing flow cleanly.</p>
+          <p><strong>If you must keep TOKEN auth</strong> (e.g. workspace where OIDC federation isn't available), a workspace admin needs to bootstrap the scope once. Get <code>api_url</code> + <code>tenant</code> values from the BDC team, then:</p>
+          <pre><code>databricks secrets create-scope sap-bdc-connect-sdk
+databricks secrets put-secret sap-bdc-connect-sdk api_url
+databricks secrets put-secret sap-bdc-connect-sdk tenant
+databricks secrets put-acl sap-bdc-connect-sdk &lt;app-sp-client-id&gt; READ</code></pre>
+          <p>Mixing <code>TOKEN</code> and <code>OIDC_FEDERATION</code> recipients in the same workspace works mechanically but is not recommended — the two auth flows resolve tenant config from different places (per-recipient vs. workspace-wide), and BDC sees the resulting publishes attributed to two different publisher identities, which fragments audit and lineage.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Why does my share show as "already published" when I never published?</summary>
+        <div>
+          <p>It shouldn't anymore. The previous heuristic flagged any share with a <code>SELECT</code> grant on a <code>bdc-connect-*</code> recipient as "published to BDC", which conflated two separate operations: the Databricks-side <code>GRANT</code> and the BDC-side <code>publish_data_product</code>.</p>
+          <p>Detection now uses the <strong>activity log</strong>: a <code>(share, recipient)</code> pair is "published" iff the latest activity event for the pair is <code>publish_job_succeeded</code>. If you publish via the app, this is always accurate. Manual / pre-activity-log publishes will appear unpublished — re-running the publish is safe (the BDC SDK uses <code>create_or_update_share</code>, idempotent on the share name).</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>The Job succeeded but the BDC catalog is empty. Bug?</summary>
+        <div>
+          <p>No. The BDC catalog ingestion polls Databricks on its own cadence — typically every <strong>~15 minutes</strong>. The Job's <code>SUCCESS</code> state and the notebook's <code>Step 4 OK: data product published</code> log line are the authoritative signals that the publish worked.</p>
+          <p>If the catalog is still empty after ~30 minutes, check the Activity tab and the linked Job run — but in nearly every case it's just the polling delay.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>What does Delete do, exactly?</summary>
+        <div>
+          <p>Two steps, in order:</p>
+          <ul>
+            <li>The BDC publish Job calls <code>BdcConnectClient.delete_share(share)</code> — this removes the BDC catalog entry, ORD descriptor, CSN schema, and revokes BDC-side recipient access. Runs as the SP.</li>
+            <li>If the BDC delete succeeds, the route runs <code>REVOKE SELECT ON SHARE</code> as <em>you</em> via OBO. The order matters: if the BDC delete fails, your consumers don't lose SELECT mid-read.</li>
+          </ul>
+          <p>The Databricks share itself is preserved (and so are its recipient grants <em>other</em> than the one you deleted). To remove the share entirely, run <code>DROP SHARE</code> in DBSQL — the app deliberately doesn't expose that.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Can I see who published / deleted what?</summary>
+        <div>
+          <p>Yes — the Activity tab. Each publish writes 2 rows (<code>publish_submitted</code>, <code>publish_job_succeeded</code>); each delete writes 3 (<code>delete_submitted</code>, <code>delete_job_succeeded</code>, <code>delete_finalized</code>). Failures land as <code>*_grant_failed</code>, <code>*_job_failed</code>, or <code>delete_finalize_failed</code> with the exact error message.</p>
+          <p>Default view: your own events. Members of the group named in <code>BDC_ACTIVITY_ADMIN_GROUP</code> in <code>app.yaml</code> (default: <code>admins</code>) see a "Show all users" toggle that drops the filter. Group membership is resolved via SCIM <code>/Me</code> against your OBO token, so it must be a UC-recognized group your account belongs to.</p>
+          <p>Underlying table: chosen at first run via the in-app setup wizard (Activity tab → "Set up activity logging") and persisted to a config file owned by the app SP, or set explicitly via <code>BDC_ACTIVITY_TABLE</code> in <code>app.yaml</code> for scripted deploys. The configured table is shown in the footer of the Activity tab. App SP writes; Admins (account-level) and <code>account users</code> read. You can query it directly from any DBSQL editor.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Why are VIEWs and MATERIALIZED VIEWs blocked?</summary>
+        <div>
+          <p>The current BDC Connect SDK doesn't support them — <code>publish_data_product</code> errors out partway through. The app blocks the publish in the Review tile so the failure surfaces immediately rather than 30 seconds into a Job run.</p>
+          <p>If a future SDK adds support, removing the block in <code>analyzeObjects()</code> is a one-line change.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Do I really need to provide primary keys?</summary>
+        <div>
+          <p>Only for tables that don't already have one defined in Unity Catalog. BDC requires every published entity to have a primary key — tables with a UC-defined PK are picked up natively. The Review tile shows a column picker only for tables that need it; selected columns get annotated <code>key: True</code>, <code>notNull: True</code> in the CSN schema before publish.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>What permissions does the app SP actually need?</summary>
+        <div>
+          <ul>
+            <li><code>CAN_USE</code> on at least one SQL warehouse — granted via the workspace's SQL Warehouses → Permissions UI (the app intentionally doesn't bind to a specific warehouse; users pick one from the dropdown at runtime)</li>
+            <li><code>CAN_RUN</code> on the publish + unpublish notebooks at the workspace paths in <code>app.yaml</code></li>
+            <li><code>USE CATALOG</code> / <code>USE SCHEMA</code> / <code>SELECT</code> on each catalog/schema/table the share pulls from — granted on demand from the Review tile's "Grant access to SP" button</li>
+            <li>If the activity log is enabled: <code>USE CATALOG</code> on the catalog, <code>USE SCHEMA</code> on the schema, and <code>SELECT</code> + <code>MODIFY</code> on the activity Delta table itself. UC enforces the full privilege chain — granting only on the table is not enough; the writer fails silently with <code>PERMISSION_DENIED</code> visible in <code>databricks apps logs</code>.</li>
+          </ul>
+          <p><strong>Not</strong> workspace admin. The SP also doesn't need any UC privileges on the share/recipient — those are checked against <em>your</em> identity when the route runs <code>GRANT</code>/<code>REVOKE</code> via OBO.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Is the activity log mandatory? Where does it get configured?</summary>
+        <div>
+          <p>It is enabled by default via a self-service wizard. The first time the Activity tab is opened with no destination configured, the app shows a setup card with two paths:</p>
+          <ul>
+            <li><strong>Provision a new table</strong> — pick a catalog where you have <code>MANAGE</code>, leave the schema/table defaults (or override), click <strong>Provision and enable</strong>. The wizard runs DDL as you (OBO) and grants the app SP <code>USE CATALOG</code>, <code>USE SCHEMA</code>, <code>SELECT</code>, and <code>MODIFY</code>. Workspaces without a <code>main</code> catalog are explicitly supported.</li>
+            <li><strong>Adopt an existing table</strong> — if a catalog admin already provisioned an activity table for the app, enter its 3-part name and click <strong>Verify and use</strong>. The wizard probes the table as the app SP (SELECT, INSERT, DELETE on a probe row) and saves the path if the probe passes. No UC privileges are required from you beyond what the SP already holds on that table.</li>
+          </ul>
+          <p>The wizard never asks you to edit <code>app.yaml</code> or redeploy. Resolution order on every request: <code>BDC_ACTIVITY_TABLE</code> env var (scripted-deploy override) → workspace config file the wizard writes → null (Activity tab opens onto the wizard).</p>
+          <p>To turn the log off entirely, set <code>BDC_ACTIVITY_TABLE</code> to a non-empty placeholder you don't grant the SP on, or delete the wizard's config file at <code>/Workspace/Users/&lt;app-sp&gt;/.bdc-app/config.json</code> and ignore the wizard. With logging effectively off, the published-state detection in the share dropdown becomes silent (no false positives, no published markers either).</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Where do I file bugs / request features?</summary>
+        <div>
+          <p>Open an issue on the project's GitHub repository. Include the share + recipient names, the run id from the Activity tab, and the exact error message if the publish/delete failed.</p>
+        </div>
+      </details>
+
+    </section>
+  </main>
+</div>
+
+<script>
+function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+function initials(name) { return (name || '?').split(/[\s@.]+/).map(p => p[0]).slice(0, 2).join('').toUpperCase(); }
+(async function () {
+  try {
+    const res = await fetch('/api/me', { credentials: 'include' });
+    if (!res.ok) return;
+    const me = await res.json();
+    const name = me.displayName || me.userName || '';
+    const email = me.email || me.userName || '';
+    document.getElementById('user-badge').innerHTML =
+      '<div class="user-avatar">' + escHtml(initials(name)) + '</div>' +
+      '<div><div>' + escHtml(name) + '</div><div class="user-email">' + escHtml(email) + '</div></div>';
+  } catch { /* badge stays empty */ }
+})();
+</script>
+</body>
+</html>

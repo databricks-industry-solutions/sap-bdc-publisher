@@ -1,6 +1,11 @@
 # Databricks Asset Bundle files
 .databricks/
 
+# Node (apps/bdc-sharing)
+node_modules/
+npm-debug.log*
+.npm
+
 # IDE files
 .vscode/
 .idea/
@@ -24,4 +29,7 @@ build/
 
 # Environment files
 .env
-.env.local 
+.env.local
+
+# Logs
+*.log

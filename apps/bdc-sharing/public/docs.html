@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Documentation — Data Sharing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F7F8FA; --bg-elev: #FFFFFF;
+    --border: #E5E8EC; --border-strong: #C5CAD2;
+    --text: #1B1F26; --text-muted: #6B7280;
+    --accent: #FF3621;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 15px; line-height: 1.65; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .header { display: flex; justify-content: space-between; align-items: center; padding: 16px 32px; border-bottom: 1px solid var(--border); background: var(--bg-elev); position: sticky; top: 0; z-index: 10; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-logo { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 18px; }
+  .brand-name { font-weight: 600; font-size: 16px; }
+  .brand-sub { font-size: 12px; color: var(--text-muted); margin-left: 4px; }
+  .header-actions a { color: var(--text-muted); font-size: 13px; margin-left: 16px; }
+  .header-actions a:hover { color: var(--text); }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 40px 32px 80px; }
+  .markdown { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 16px; padding: 40px 48px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); }
+  .markdown h1 { font-size: 28px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .markdown h2 { font-size: 20px; font-weight: 600; margin: 32px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .markdown h3 { font-size: 17px; font-weight: 600; margin: 24px 0 8px; }
+  .markdown h4 { font-size: 15px; font-weight: 600; margin: 18px 0 6px; }
+  .markdown p { margin: 10px 0; }
+  .markdown ul, .markdown ol { margin: 10px 0; padding-left: 24px; }
+  .markdown li { margin: 4px 0; }
+  .markdown code { font-family: 'Menlo', 'Monaco', monospace; font-size: 12.5px; background: #F3F4F6; padding: 2px 6px; border-radius: 4px; color: #1F2937; }
+  .markdown pre { background: #0F172A; color: #E2E8F0; padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; }
+  .markdown pre code { background: transparent; color: inherit; padding: 0; font-size: 12.5px; }
+  .markdown blockquote { border-left: 3px solid var(--accent); margin: 14px 0; padding: 4px 16px; color: var(--text-muted); background: #FFF5F3; border-radius: 0 8px 8px 0; }
+  .markdown hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+  .markdown table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13px; }
+  .markdown th, .markdown td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; vertical-align: top; }
+  .markdown th { background: #F3F4F6; font-weight: 600; }
+  .markdown a { color: var(--accent); }
+  .loading { color: var(--text-muted); padding: 40px; text-align: center; }
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="brand">
+    <div class="brand-logo">D</div>
+    <div><div class="brand-name">Data Sharing <span class="brand-sub">Documentation</span></div></div>
+  </div>
+  <div class="header-actions">
+    <a href="/">← Back to app</a>
+    <a href="/README.md" target="_blank">View raw</a>
+  </div>
+</header>
+<div class="wrap">
+  <div id="docs" class="markdown"><div class="loading">Loading documentation…</div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script>
+(async function() {
+  try {
+    const res = await fetch('/README.md', { credentials: 'include' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const md = await res.text();
+    document.getElementById('docs').innerHTML = marked.parse(md, { gfm: true, breaks: false });
+  } catch (e) {
+    document.getElementById('docs').innerHTML =
+      '<div class="loading">Failed to load documentation: ' + (e.message || e) + '</div>';
+  }
+})();
+</script>
+</body>
+</html>

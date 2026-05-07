@@ -1,1 +1,4 @@
-# Check here to get the latest version of the databricks-cli: https://github.com/databricks/cli
+# Runtime dependencies for the BDC publish/unpublish notebooks. The Databricks
+# Apps builder reads apps/bdc-sharing/package.json for the Node side.
+sap-bdc-connect-sdk
+databricks-sdk
