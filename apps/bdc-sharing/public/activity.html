@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Activity — Data Sharing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F4F6FA; --bg-elev: #FFFFFF; --bg-tile: #FFFFFF;
+    --border: #E4E7EC; --border-strong: #CFD4DC;
+    --text: #0F172A; --text-muted: #64748B; --text-dim: #94A3B8;
+    --accent: #FF3621; --accent-hover: #E5301D; --accent-dim: #FFE3DD; --accent-soft: #FFF5F2;
+    --ok: #16A34A; --ok-soft: #DCFCE7;
+    --warn: #D97706; --warn-soft: #FEF3C7;
+    --err: #DC2626; --err-soft: #FEE2E2;
+    --info: #2563EB; --info-soft: #DBEAFE;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow: 0 2px 6px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --radius-lg: 20px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  body { background: radial-gradient(1200px 500px at 50% -200px, rgba(255, 54, 33, 0.05), transparent 70%), var(--bg); min-height: 100vh; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  button { font-family: inherit; }
+
+  .app { min-height: 100vh; display: flex; flex-direction: column; }
+  .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 40px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.85); backdrop-filter: saturate(180%) blur(8px); position: sticky; top: 0; z-index: 20; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-logo { width: 36px; height: 36px; background: linear-gradient(135deg, #FF3621, #FF6B47); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 19px; box-shadow: 0 3px 10px rgba(255,54,33,0.28); }
+  .brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.015em; }
+  .brand-sub { font-size: 12px; color: var(--text-muted); margin-left: 4px; font-weight: 400; }
+  .user-badge { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 6px 10px 6px 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
+  .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #FF3621, #FF6B47); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; }
+  .user-email { color: var(--text-muted); font-size: 12px; }
+  .header-actions { display: flex; align-items: center; gap: 16px; }
+  .header-actions a { color: var(--text-muted); font-size: 13px; font-weight: 500; transition: color 0.15s; }
+  .header-actions a:hover { color: var(--text); text-decoration: none; }
+
+  .main { max-width: 1200px; margin: 0 auto; padding: 48px 40px 80px; width: 100%; }
+  .welcome h1 { font-size: 32px; font-weight: 700; margin: 0 0 12px; letter-spacing: -0.028em; }
+  .welcome p { color: var(--text-muted); margin: 0 0 32px; max-width: 760px; font-size: 14.5px; }
+
+  .panel { background: var(--bg-tile); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px 26px; box-shadow: var(--shadow-sm); }
+  .panel-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+
+  .btn { padding: 9px 16px; border: none; border-radius: 10px; font-weight: 500; font-size: 13px; cursor: pointer; transition: background 0.15s, transform 0.05s, box-shadow 0.15s; }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+  .btn.secondary { background: var(--bg-elev); color: var(--text); border: 1px solid var(--border-strong); }
+  .btn.secondary:hover:not(:disabled) { background: var(--bg); border-color: var(--text-muted); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  select { background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 10px; padding: 8px 36px 8px 12px; color: var(--text); font-size: 13px; outline: none; appearance: none; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+  select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+
+  .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .controls .label { font-size: 12.5px; color: var(--text-muted); }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); cursor: pointer; user-select: none; }
+  .toggle input { accent-color: var(--accent); }
+  .toggle.hidden { display: none; }
+
+  table.activity { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.activity thead th { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  table.activity tbody td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.activity tbody tr:last-child td { border-bottom: none; }
+  table.activity .when { white-space: nowrap; color: var(--text-muted); font-size: 12px; }
+  table.activity .mono { font-family: 'Menlo', monospace; font-size: 12px; }
+
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; border: 1px solid; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); border-color: #86EFAC; }
+  .pill.err { background: var(--err-soft); color: var(--err); border-color: #FECACA; }
+  .pill.pending { background: var(--info-soft); color: var(--info); border-color: #93C5FD; }
+
+  .empty { padding: 32px; text-align: center; color: var(--text-muted); font-size: 13px; }
+  .err-box { padding: 14px; border: 1px solid #FECACA; background: #FEF2F2; color: #991B1B; border-radius: 10px; font-size: 13px; }
+  .err-msg { color: var(--err); font-size: 11.5px; margin-top: 4px; max-width: 480px; overflow-wrap: anywhere; }
+  .muted { color: var(--text-muted); font-size: 12px; }
+
+  .loading { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; border: 1px solid var(--border-strong); background: #F3F4F6; color: var(--text-muted); }
+  .badge.running { background: #ECFDF5; color: var(--ok); border-color: #86EFAC; }
+  .badge.starting { background: #FFFBEB; color: var(--warn); border-color: #FCD34D; }
+  .badge.stopped { background: #FEF2F2; color: var(--err); border-color: #FECACA; }
+
+  /* Setup wizard styles */
+  .wizard { padding: 8px 4px; }
+  .wizard h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 8px; }
+  .wizard p.lead { color: var(--text-muted); margin: 0 0 22px; max-width: 620px; font-size: 13.5px; }
+  .wizard .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; max-width: 520px; }
+  .wizard label { font-size: 12px; font-weight: 500; color: var(--text); }
+  .wizard label .hint { color: var(--text-muted); font-weight: 400; margin-left: 6px; }
+  .wizard input[type="text"], .wizard select.full { background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 10px; padding: 9px 12px; color: var(--text); font-size: 13.5px; outline: none; font-family: inherit; }
+  .wizard input[type="text"]:focus, .wizard select.full:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .wizard select.full { padding-right: 36px; appearance: none; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+  .wizard .actions { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
+  .wizard .btn-primary { background: var(--accent); color: white; padding: 10px 18px; border: none; border-radius: 10px; font-weight: 500; font-size: 13.5px; cursor: pointer; }
+  .wizard .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .wizard .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .wizard details.sql-preview { margin: 4px 0 18px; max-width: 760px; border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: #FAFBFD; }
+  .wizard details.sql-preview > summary { cursor: pointer; font-size: 12.5px; color: var(--text-muted); list-style: none; user-select: none; }
+  .wizard details.sql-preview > summary::-webkit-details-marker { display: none; }
+  .wizard details.sql-preview > summary::before { content: '▸ '; color: var(--text-dim); }
+  .wizard details.sql-preview[open] > summary::before { content: '▾ '; }
+  .wizard pre.sql { margin: 10px 0 4px; font-family: 'Menlo', monospace; font-size: 11.5px; line-height: 1.55; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .wizard .steps { margin: 16px 0 4px; max-width: 600px; }
+  .wizard .step { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+  .wizard .step + .step { margin-top: 4px; }
+  .wizard .step.pending { color: var(--text-muted); }
+  .wizard .step.active { background: var(--info-soft); color: var(--info); }
+  .wizard .step.ok { background: var(--ok-soft); color: var(--ok); }
+  .wizard .step.skipped { background: var(--warn-soft); color: var(--warn); flex-direction: column; align-items: flex-start; }
+  .wizard .step.failed { background: var(--err-soft); color: var(--err); flex-direction: column; align-items: flex-start; }
+  .wizard .step .icon { width: 16px; display: inline-block; text-align: center; }
+  .wizard .step .err-detail { font-family: 'Menlo', monospace; font-size: 11.5px; margin-top: 4px; padding-left: 26px; overflow-wrap: anywhere; max-width: 100%; }
+  .wizard .footer-config { margin-top: 18px; font-size: 12px; color: var(--text-muted); }
+  .wizard .config-source-badge { display: inline-block; margin-left: 10px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; border: 1px solid var(--border); background: #F3F4F6; color: var(--text-muted); }
+  .wizard .small { font-size: 12.5px; max-width: 720px; margin: 4px 0 16px; }
+  .wizard-section { padding: 20px 0; border-top: 1px solid var(--border); margin-top: 16px; }
+  .wizard-section:first-of-type { border-top: none; padding-top: 6px; margin-top: 0; }
+  .wizard-section.locked { opacity: 0.6; }
+  .wizard-section.locked input, .wizard-section.locked select, .wizard-section.locked button { cursor: not-allowed; }
+  .wizard-section-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+  .wizard-section-head h3 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.005em; }
+  .wizard-section-head .muted { font-size: 12px; color: var(--text-muted); }
+  .locked-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; border: 1px solid #FCD34D; background: var(--warn-soft); color: var(--warn); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="brand">
+      <div class="brand-logo">D</div>
+      <div><div class="brand-name">Data Sharing <span class="brand-sub">Activity</span></div></div>
+    </div>
+    <div class="header-actions">
+      <a href="/" title="Back to app">← Back to app</a>
+      <a href="/faq.html" title="Open FAQ">FAQ</a>
+      <a href="/docs.html" title="Open documentation" target="_blank">Documentation</a>
+      <a href="/logout" title="Sign out">Sign out</a>
+      <div id="user-badge" class="user-badge"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="welcome">
+      <h1>Activity</h1>
+      <p>Recent publish &amp; delete events. Each row is a state transition — submit, job success or failure, REVOKE — with the user, share, recipient, and a link to the underlying job run. Defaults to your own events; admins can switch to all users.</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div id="warehouse-row" class="controls">
+          <span class="label">Warehouse</span>
+          <select id="wh-select" disabled><option>Loading…</option></select>
+          <span id="wh-state"></span>
+        </div>
+        <div class="controls">
+          <label id="admin-toggle" class="toggle hidden">
+            <input type="checkbox" id="all-checkbox" />
+            <span>Show all users</span>
+          </label>
+          <button id="refresh-btn" type="button" class="btn secondary">Refresh</button>
+        </div>
+      </div>
+      <div id="activity-body"><div class="empty"><span class="loading"></span>Loading…</div></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const WH_KEY = 'data-sharing:warehouseId';
+const ui = { showAll: false, workspaceHost: '', warehouseId: null };
+
+async function api(method, path) {
+  const res = await fetch(path, { method, headers: { Accept: 'application/json' }, credentials: 'include' });
+  const txt = await res.text();
+  let data = null;
+  try { data = txt ? JSON.parse(txt) : null; } catch { data = { raw: txt }; }
+  if (!res.ok) {
+    const err = new Error((data && (data.message || data.error)) || ('HTTP ' + res.status));
+    err.payload = data; err.status = res.status; throw err;
+  }
+  return data;
+}
+function el(id) { return document.getElementById(id); }
+function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+function initials(name) { return (name || '?').split(/[\s@.]+/).map(p => p[0]).slice(0, 2).join('').toUpperCase(); }
+
+function pillForEvent(t) {
+  if (!t) return { kind: 'pending', label: '—' };
+  if (t.endsWith('_succeeded') || t === 'delete_finalized') return { kind: 'ok', label: 'Success' };
+  if (t.endsWith('_failed')) return { kind: 'err', label: 'Failed' };
+  if (t === 'publish_submitted' || t === 'delete_submitted') return { kind: 'pending', label: 'Submitted' };
+  return { kind: 'pending', label: t };
+}
+function eventLabel(t) {
+  const map = {
+    publish_grant_failed:    'GRANT failed',
+    publish_submitted:       'Job submitted',
+    publish_job_succeeded:   'Publish succeeded',
+    publish_job_failed:      'Publish job failed',
+    delete_submitted:        'Job submitted',
+    delete_job_succeeded:    'Delete job succeeded',
+    delete_job_failed:       'Delete job failed',
+    delete_finalized:        'REVOKE applied',
+    delete_finalize_failed:  'REVOKE failed',
+  };
+  return map[t] || t || '—';
+}
+function fmtTime(t) {
+  if (!t) return '';
+  const d = new Date(t);
+  if (isNaN(d.getTime())) return String(t);
+  return d.toLocaleString();
+}
+function runLink(runId) {
+  if (!runId) return '<span class="muted">—</span>';
+  const host = ui.workspaceHost || '';
+  const safe = escHtml(String(runId));
+  if (!host) return '<span class="mono">' + safe + '</span>';
+  const href = host.replace(/\/+$/, '') + '/jobs/runs/' + encodeURIComponent(runId);
+  return '<a href="' + escHtml(href) + '" target="_blank" rel="noopener" class="mono">' + safe + '</a>';
+}
+function renderTable(events) {
+  const body = el('activity-body');
+  if (!events.length) {
+    body.innerHTML = '<div class="empty">No activity yet — publish or delete a share to see events here.</div>';
+    return;
+  }
+  const rows = events.map((e) => {
+    const p = pillForEvent(e.event_type);
+    const status = '<span class="pill ' + p.kind + '" title="' + escHtml(e.event_type || '') + '">' + escHtml(eventLabel(e.event_type)) + '</span>';
+    const errMsg = e.error_message ? '<div class="err-msg">' + escHtml(e.error_message) + '</div>' : '';
+    return '<tr>' +
+      '<td class="when">' + escHtml(fmtTime(e.event_time)) + '</td>' +
+      '<td>' + escHtml(e.user_email || '') + '</td>' +
+      '<td>' + escHtml((e.action || '').toUpperCase()) + '</td>' +
+      '<td class="mono">' + escHtml(e.share_name || '') + '</td>' +
+      '<td class="mono">' + escHtml(e.recipient_name || '') + '</td>' +
+      '<td>' + status + errMsg + '</td>' +
+      '<td>' + runLink(e.run_id) + '</td>' +
+      '</tr>';
+  }).join('');
+  body.innerHTML =
+    '<table class="activity">' +
+    '<thead><tr><th>When</th><th>User</th><th>Action</th><th>Share</th><th>Recipient</th><th>Status</th><th>Run</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>';
+}
+
+function setControlsVisible(visible) {
+  // Hide warehouse + refresh + admin-toggle controls when rendering wizard;
+  // they belong to the History view only.
+  el('warehouse-row').style.display = visible ? '' : 'none';
+  el('refresh-btn').style.display = visible ? '' : 'none';
+  if (!visible) el('admin-toggle').classList.add('hidden');
+}
+
+async function loadActivity() {
+  if (!ui.warehouseId) return;
+  const body = el('activity-body');
+  body.innerHTML = '<div class="empty"><span class="loading"></span>Loading…</div>';
+  try {
+    const qs = '?warehouseId=' + encodeURIComponent(ui.warehouseId) + '&limit=200' + (ui.showAll ? '&all=true' : '');
+    const r = await api('GET', '/api/activity' + qs);
+    if (!r.enabled) {
+      // Not configured yet — render the setup wizard instead of the list.
+      await renderWizard();
+      return;
+    }
+    setControlsVisible(true);
+    ui.workspaceHost = r.workspaceHost || '';
+    el('admin-toggle').classList.toggle('hidden', !r.isAdmin);
+    renderTable(r.events || []);
+    renderConfigFooter(r.table, r.source);
+  } catch (e) {
+    body.innerHTML = '<div class="err-box"><strong>Could not load activity:</strong> ' + escHtml(e.message) + '</div>';
+  }
+}
+
+function renderConfigFooter(table, source) {
+  // Existing footer (if any) sits inside the panel after the table; remove old.
+  const old = document.getElementById('config-footer');
+  if (old) old.remove();
+  if (!table) return;
+  const footer = document.createElement('div');
+  footer.id = 'config-footer';
+  footer.className = 'wizard footer-config';
+  const sourceLabel = source === 'env' ? 'env var' : source === 'config' ? 'wizard' : '';
+  footer.innerHTML =
+    'Logging to <code>' + escHtml(table) + '</code>' +
+    (sourceLabel ? '<span class="config-source-badge">via ' + escHtml(sourceLabel) + '</span>' : '');
+  el('activity-body').parentElement.appendChild(footer);
+}
+
+async function renderWizard() {
+  setControlsVisible(false);
+  const body = el('activity-body');
+  body.innerHTML = '<div class="empty"><span class="loading"></span>Loading catalogs…</div>';
+  if (!ui.warehouseId) {
+    body.innerHTML = '<div class="empty">Pick a warehouse first to discover catalogs.</div>';
+    return;
+  }
+  let catalogs = [];
+  let spClientId = null;
+  try {
+    const [c, s] = await Promise.all([
+      api('GET', '/api/setup/catalogs?warehouseId=' + encodeURIComponent(ui.warehouseId)),
+      api('GET', '/api/setup/activity-status'),
+    ]);
+    catalogs = c.catalogs || [];
+    spClientId = s.spClientId || null;
+  } catch (e) {
+    body.innerHTML = '<div class="err-box"><strong>Could not load setup state:</strong> ' + escHtml(e.message) + '</div>';
+    return;
+  }
+
+  const manageable = catalogs.filter((c) => c.hasManage);
+  const provisionLocked = manageable.length === 0;
+
+  // Render the card. Two sub-sections: provision form (top) and adopt-existing (bottom).
+  body.innerHTML =
+    '<div class="wizard" id="wizard-card">' +
+      '<h2>Set up activity logging</h2>' +
+      '<p class="lead">The activity log records every publish and delete attempt and powers the "Published ✓" markers in the share picker. Pick how to enable it.</p>' +
+
+      '<div class="wizard-section' + (provisionLocked ? ' locked' : '') + '" id="wz-provision-section">' +
+        '<div class="wizard-section-head">' +
+          '<h3>Provision a new table</h3>' +
+          (provisionLocked
+            ? '<span class="locked-badge">Needs MANAGE on a catalog</span>'
+            : '<span class="muted">Recommended</span>') +
+        '</div>' +
+        '<p class="muted small">' +
+          'The wizard runs DDL as you and grants the app service principal <code>USE CATALOG</code>, <code>USE SCHEMA</code>, <code>SELECT</code>, and <code>MODIFY</code> on the new table. ' +
+          'Issuing those grants requires <code>MANAGE</code> (or ownership) on the catalog — only catalogs where you currently have that are selectable.' +
+        '</p>' +
+        renderProvisionForm(catalogs) +
+        '<div id="wz-steps" class="steps" style="display:none"></div>' +
+      '</div>' +
+
+      '<div class="wizard-section">' +
+        '<div class="wizard-section-head">' +
+          '<h3>Adopt an existing table</h3>' +
+          (provisionLocked ? '<span class="muted">Recommended</span>' : '<span class="muted">Optional</span>') +
+        '</div>' +
+        '<p class="muted small">' +
+          'If a catalog admin has already provisioned an activity table for this app, enter its 3-part name. The wizard verifies that the app service principal can read and write to it before saving.' +
+        '</p>' +
+        renderAdoptForm(spClientId) +
+        '<div id="wz-probes" class="steps" style="display:none"></div>' +
+      '</div>' +
+
+    '</div>';
+
+  // Wire up provision form (only if a manageable catalog exists).
+  if (!provisionLocked) {
+    const refreshSql = () => {
+      const c = el('wz-catalog').value;
+      const s = el('wz-schema').value.trim();
+      const t = el('wz-table').value.trim();
+      el('wz-sql').textContent = previewSql(c, s, t, spClientId);
+    };
+    refreshSql();
+    el('wz-catalog').onchange = refreshSql;
+    el('wz-schema').oninput = refreshSql;
+    el('wz-table').oninput = refreshSql;
+    el('wz-go').onclick = runWizard;
+  }
+  el('wz-adopt-go').onclick = runAdopt;
+}
+
+function renderProvisionForm(catalogs) {
+  if (!catalogs.length) {
+    return '<div class="muted small">No Unity Catalogs are visible to you on this warehouse. Ask a workspace admin to grant you access.</div>';
+  }
+  const opts = catalogs.map((c) => {
+    const label = c.hasManage ? c.name : c.name + ' [needs MANAGE]';
+    const tooltip = c.hasManage ? '' : ' title="You don\'t have MANAGE on this catalog. Granting USE CATALOG to the app SP requires MANAGE."';
+    return '<option value="' + escHtml(c.name) + '"' + (c.hasManage ? '' : ' disabled') + tooltip + '>' + escHtml(label) + '</option>';
+  }).join('');
+  const hasAnyManage = catalogs.some((c) => c.hasManage);
+  return (
+    '<div class="field">' +
+      '<label for="wz-catalog">Catalog<span class="hint">' +
+        (hasAnyManage ? 'only catalogs you have MANAGE on are selectable' : 'no MANAGE-eligible catalogs found') +
+      '</span></label>' +
+      '<select id="wz-catalog" class="full"' + (hasAnyManage ? '' : ' disabled') + '>' + opts + '</select>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label for="wz-schema">Schema</label>' +
+      '<input id="wz-schema" type="text" value="bdc_sharing"' + (hasAnyManage ? '' : ' disabled') + ' />' +
+    '</div>' +
+    '<div class="field">' +
+      '<label for="wz-table">Table</label>' +
+      '<input id="wz-table" type="text" value="activity"' + (hasAnyManage ? '' : ' disabled') + ' />' +
+    '</div>' +
+    '<details class="sql-preview"><summary>Show the SQL that will run</summary><pre class="sql" id="wz-sql"></pre></details>' +
+    '<div class="actions">' +
+      '<button id="wz-go" type="button" class="btn-primary"' + (hasAnyManage ? '' : ' disabled') + '>Provision and enable</button>' +
+      '<span id="wz-msg" class="muted"></span>' +
+    '</div>'
+  );
+}
+
+function renderAdoptForm(spClientId) {
+  const sp = spClientId || '<app-sp-id>';
+  const exampleSql = [
+    '-- Run this in DBSQL or a notebook on a catalog you have MANAGE on.',
+    '-- Then enter the 3-part name above and click Verify and use.',
+    'CREATE SCHEMA IF NOT EXISTS <catalog>.bdc_sharing;',
+    'CREATE TABLE IF NOT EXISTS <catalog>.bdc_sharing.activity (',
+    '  event_id STRING NOT NULL, event_time TIMESTAMP NOT NULL,',
+    '  event_type STRING NOT NULL, user_email STRING NOT NULL,',
+    '  action STRING NOT NULL, share_name STRING NOT NULL,',
+    '  recipient_name STRING NOT NULL, run_id STRING, warehouse_id STRING,',
+    '  error_code STRING, error_message STRING, metadata_json STRING,',
+    '  app_deployment STRING,',
+    '  event_date DATE GENERATED ALWAYS AS (CAST(event_time AS DATE))',
+    ') USING DELTA PARTITIONED BY (event_date);',
+    'GRANT USE CATALOG ON CATALOG <catalog> TO `' + sp + '`;',
+    'GRANT USE SCHEMA ON SCHEMA <catalog>.bdc_sharing TO `' + sp + '`;',
+    'GRANT SELECT, MODIFY ON TABLE <catalog>.bdc_sharing.activity TO `' + sp + '`;',
+    'GRANT SELECT ON TABLE <catalog>.bdc_sharing.activity TO `account users`;',
+  ].join('\n');
+  return (
+    '<div class="field">' +
+      '<label for="wz-adopt-name">Existing table<span class="hint">3-part name: catalog.schema.table</span></label>' +
+      '<input id="wz-adopt-name" type="text" placeholder="e.g. analytics.bdc_sharing.activity" />' +
+    '</div>' +
+    '<details class="sql-preview"><summary>Show the SQL a catalog admin should run</summary><pre class="sql">' + escHtml(exampleSql) + '</pre></details>' +
+    '<div class="actions">' +
+      '<button id="wz-adopt-go" type="button" class="btn-primary">Verify and use</button>' +
+      '<span id="wz-adopt-msg" class="muted"></span>' +
+    '</div>'
+  );
+}
+
+function previewSql(catalog, schema, table, spClientId) {
+  const fqSchema = '`' + catalog + '`.`' + schema + '`';
+  const fqTable = fqSchema + '.`' + table + '`';
+  const sp = spClientId || '<app-sp-id>';
+  return [
+    'CREATE SCHEMA IF NOT EXISTS ' + fqSchema + ';',
+    'CREATE TABLE IF NOT EXISTS ' + fqTable + ' (',
+    '  event_id STRING NOT NULL, event_time TIMESTAMP NOT NULL,',
+    '  event_type STRING NOT NULL, user_email STRING NOT NULL,',
+    '  action STRING NOT NULL, share_name STRING NOT NULL,',
+    '  recipient_name STRING NOT NULL, run_id STRING, warehouse_id STRING,',
+    '  error_code STRING, error_message STRING, metadata_json STRING,',
+    '  app_deployment STRING,',
+    '  event_date DATE GENERATED ALWAYS AS (CAST(event_time AS DATE))',
+    ') USING DELTA PARTITIONED BY (event_date);',
+    'GRANT USE CATALOG ON CATALOG `' + catalog + '` TO `' + sp + '`;',
+    'GRANT USE SCHEMA ON SCHEMA ' + fqSchema + ' TO `' + sp + '`;',
+    'GRANT SELECT, MODIFY ON TABLE ' + fqTable + ' TO `' + sp + '`;',
+    'GRANT SELECT ON TABLE ' + fqTable + ' TO `account users`;',
+  ].join('\n');
+}
+
+async function runAdopt() {
+  const tableInput = el('wz-adopt-name');
+  const goBtn = el('wz-adopt-go');
+  const msg = el('wz-adopt-msg');
+  const probesEl = el('wz-probes');
+  const table = tableInput.value.trim();
+  if (!table) {
+    msg.innerHTML = '<span style="color:var(--err)">Enter the 3-part name first.</span>';
+    return;
+  }
+  goBtn.disabled = true;
+  msg.textContent = 'Verifying as the app service principal…';
+  probesEl.style.display = '';
+  probesEl.innerHTML = '<div class="step active"><span class="loading"></span><span>Probing read + write access…</span></div>';
+  try {
+    const res = await fetch('/api/setup/adopt-activity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ table, warehouseId: ui.warehouseId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    renderProbeSteps(data.probes || []);
+    if (!res.ok || !data.ok) {
+      msg.innerHTML = '<span style="color:var(--err)">' + escHtml(data.message || 'Adoption failed') + '</span>';
+      goBtn.disabled = false;
+      return;
+    }
+    msg.innerHTML = '<span style="color:var(--ok)">Verified. Loading activity…</span>';
+    setTimeout(() => loadActivity(), 600);
+  } catch (e) {
+    probesEl.innerHTML = '<div class="step failed"><div><span class="icon">✕</span><span>Request failed</span></div><div class="err-detail">' + escHtml(e.message) + '</div></div>';
+    msg.innerHTML = '<span style="color:var(--err)">Network or server error.</span>';
+    goBtn.disabled = false;
+  }
+}
+
+function renderProbeSteps(probes) {
+  const probesEl = el('wz-probes');
+  if (!probes.length) { probesEl.innerHTML = ''; return; }
+  probesEl.innerHTML = probes.map((p) => {
+    if (p.status === 'ok') return '<div class="step ok"><span class="icon">✓</span><span>' + escHtml(p.name) + '</span></div>';
+    if (p.status === 'skipped') {
+      const err = p.error ? '<div class="err-detail">' + escHtml(p.error) + '</div>' : '';
+      return '<div class="step skipped"><div><span class="icon">!</span><span>' + escHtml(p.name) + ' — skipped</span></div>' + err + '</div>';
+    }
+    if (p.status === 'failed') {
+      const err = p.error ? '<div class="err-detail">' + escHtml(p.error) + '</div>' : '';
+      return '<div class="step failed"><div><span class="icon">✕</span><span>' + escHtml(p.name) + '</span></div>' + err + '</div>';
+    }
+    return '<div class="step pending"><span class="icon">·</span><span>' + escHtml(p.name) + '</span></div>';
+  }).join('');
+}
+
+async function runWizard() {
+  const catalog = el('wz-catalog').value;
+  const schema = el('wz-schema').value.trim();
+  const table = el('wz-table').value.trim();
+  const goBtn = el('wz-go');
+  const msg = el('wz-msg');
+  const stepsEl = el('wz-steps');
+  goBtn.disabled = true;
+  msg.textContent = 'Provisioning…';
+  stepsEl.style.display = '';
+  stepsEl.innerHTML = '<div class="step active"><span class="loading"></span><span>Running DDL as you (OBO)…</span></div>';
+  try {
+    const body = JSON.stringify({ catalog, schema, table, warehouseId: ui.warehouseId });
+    const res = await fetch('/api/setup/activity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
+      body,
+    });
+    const data = await res.json().catch(() => ({}));
+    renderWizardSteps(data.steps || []);
+    if (!res.ok || !data.ok) {
+      msg.innerHTML = '<span style="color:var(--err)">' + escHtml(data.message || 'Provisioning failed') + '</span>';
+      goBtn.disabled = false;
+      return;
+    }
+    msg.innerHTML = '<span style="color:var(--ok)">Done. Loading activity…</span>';
+    setTimeout(() => loadActivity(), 600);
+  } catch (e) {
+    stepsEl.innerHTML = '<div class="step failed"><div><span class="icon">✕</span><span>Request failed</span></div><div class="err-detail">' + escHtml(e.message) + '</div></div>';
+    msg.innerHTML = '<span style="color:var(--err)">Network or server error.</span>';
+    goBtn.disabled = false;
+  }
+}
+
+function renderWizardSteps(steps) {
+  const stepsEl = el('wz-steps');
+  if (!steps.length) { stepsEl.innerHTML = ''; return; }
+  stepsEl.innerHTML = steps.map((s) => {
+    if (s.status === 'ok') return '<div class="step ok"><span class="icon">✓</span><span>' + escHtml(s.name) + '</span></div>';
+    if (s.status === 'skipped') {
+      const err = s.error ? '<div class="err-detail">' + escHtml(s.error) + '</div>' : '';
+      return '<div class="step skipped"><div><span class="icon">!</span><span>' + escHtml(s.name) + ' — skipped</span></div>' + err + '</div>';
+    }
+    if (s.status === 'failed') {
+      const err = s.error ? '<div class="err-detail">' + escHtml(s.error) + '</div>' : '';
+      return '<div class="step failed"><div><span class="icon">✕</span><span>' + escHtml(s.name) + '</span></div>' + err + '</div>';
+    }
+    return '<div class="step pending"><span class="icon">·</span><span>' + escHtml(s.name) + '</span></div>';
+  }).join('');
+}
+
+function renderWarehouseSelect(warehouses, defaultId) {
+  const sel = el('wh-select');
+  sel.disabled = false;
+  sel.innerHTML = warehouses.map((w) =>
+    '<option value="' + escHtml(w.id) + '"' + (w.id === defaultId ? ' selected' : '') + '>' +
+    escHtml(w.name) + (w.size ? ' — ' + escHtml(w.size) : '') + ' [' + escHtml(w.state) + ']' +
+    '</option>'
+  ).join('');
+  sel.onchange = () => switchWarehouse(sel.value);
+}
+
+async function switchWarehouse(id) {
+  if (!id) return;
+  ui.warehouseId = id;
+  localStorage.setItem(WH_KEY, id);
+  el('wh-state').innerHTML = '<span class="badge starting">starting…</span>';
+  try {
+    const r = await api('POST', '/api/warehouses/' + encodeURIComponent(id) + '/start');
+    if (r.state === 'RUNNING') {
+      el('wh-state').innerHTML = '<span class="badge running">RUNNING</span>';
+      await loadActivity();
+      return;
+    }
+    const deadline = Date.now() + 180_000;
+    while (Date.now() < deadline) {
+      await new Promise((res) => setTimeout(res, 2000));
+      const cur = await api('GET', '/api/warehouses/' + encodeURIComponent(id));
+      el('wh-state').innerHTML = '<span class="badge ' + String(cur.state).toLowerCase() + '">' + escHtml(cur.state) + '</span>';
+      if (cur.state === 'RUNNING') {
+        await loadActivity();
+        return;
+      }
+      if (cur.state === 'STOPPED' || cur.state === 'DELETED') break;
+    }
+    el('activity-body').innerHTML = '<div class="err-box">Warehouse did not reach RUNNING. Pick another warehouse to continue.</div>';
+  } catch (e) {
+    el('activity-body').innerHTML = '<div class="err-box"><strong>Could not start warehouse:</strong> ' + escHtml(e.message) + '</div>';
+  }
+}
+
+(async function boot() {
+  try {
+    const me = await api('GET', '/api/me');
+    const name = me.displayName || me.userName || '';
+    const email = me.email || me.userName || '';
+    el('user-badge').innerHTML =
+      '<div class="user-avatar">' + escHtml(initials(name)) + '</div>' +
+      '<div><div>' + escHtml(name) + '</div><div class="user-email">' + escHtml(email) + '</div></div>';
+  } catch { /* badge stays empty */ }
+
+  try {
+    const w = await api('GET', '/api/warehouses');
+    if (!w.warehouses || !w.warehouses.length) {
+      el('wh-select').innerHTML = '<option>No warehouses available</option>';
+      el('activity-body').innerHTML = '<div class="err-box">No SQL warehouses are visible to the app. Grant the app SP CAN_USE on a warehouse.</div>';
+      return;
+    }
+    const savedId = localStorage.getItem(WH_KEY);
+    const defaultId = (savedId && w.warehouses.find((x) => x.id === savedId)) ? savedId : w.defaultId;
+    renderWarehouseSelect(w.warehouses, defaultId);
+    if (defaultId) await switchWarehouse(defaultId);
+  } catch (e) {
+    el('activity-body').innerHTML = '<div class="err-box"><strong>Failed to list warehouses:</strong> ' + escHtml(e.message) + '</div>';
+  }
+})();
+
+el('refresh-btn').onclick = () => loadActivity();
+el('all-checkbox').onchange = (ev) => {
+  ui.showAll = !!ev.target.checked;
+  loadActivity();
+};
+</script>
+</body>
+</html>

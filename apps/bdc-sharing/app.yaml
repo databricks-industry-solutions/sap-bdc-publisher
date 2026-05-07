@@ -1,0 +1,28 @@
+command: ['npm', 'run', 'start']
+env:
+  - name: 'NODE_ENV'
+    value: 'production'
+  # Leave the notebook paths empty for DAB-deployed installs — the app's
+  # publish/unpublish routes auto-resolve them from the bundle layout. Set
+  # explicitly only if you place the notebooks outside the bundle.
+  - name: 'BDC_NOTEBOOK_PATH'
+    value: ''
+  - name: 'BDC_UNPUBLISH_NOTEBOOK_PATH'
+    value: ''
+  # Activity log destination. Leave empty so the in-app setup wizard
+  # provisions a destination interactively (Activity tab → "Set up activity
+  # logging"). Set to a fully-qualified Delta table for scripted deploys —
+  # the wizard is then skipped and this value wins on every request.
+  - name: 'BDC_ACTIVITY_TABLE'
+    value: ''
+  - name: 'BDC_ACTIVITY_ADMIN_GROUP'
+    value: 'admins'
+# user_api_scopes (the `sql` opt-in scope the app needs at runtime) is set on
+# the Apps resource in the bundle's databricks.yml. The Apps API does not
+# honor `user_authorization` from app.yaml, so these scope listings are
+# informational only — kept here for documentation.
+user_authorization:
+  scopes:
+    - 'iam.current-user:read'
+    - 'iam.access-control:read'
+    - 'sql'
