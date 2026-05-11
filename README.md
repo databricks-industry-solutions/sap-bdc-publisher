@@ -11,23 +11,41 @@ guided UI.
 
 ---
 
-## Installation Guidelines
+## Installation
 
-1. **Clone this project into your Databricks Workspace** (Workspace → Clone
-   from GitHub → paste this repo URL).
+Two install paths. Pick **Option A** if you just want to run the app.
+Pick **Option B** if you're developing or customizing it.
 
+### Option A — Install from Databricks Marketplace (recommended)
+
+1. Open **Marketplace** in your Databricks workspace.
+2. Find **SAP BDC Publisher** → click **Install**.
+3. In the in-workspace install wizard:
+   - Name the app and pick the workspace folder to deploy into.
+   - **Pick a SQL warehouse** from the dropdown. This warehouse is
+     auto-granted `CAN_USE` to the app's service principal, which
+     bootstraps the in-app warehouse dropdown.
+   - Approve the requested OAuth scopes (`sql`, `iam.current-user:read`,
+     `iam.access-control:read`).
+4. Click **Install**. Deployment takes ~30–120 seconds.
+5. Open the **app URL** from the wizard's success screen. The Activity
+   tab launches a one-time setup sub-wizard on first visit (provisions or
+   adopts a Delta table for the audit log; takes ~10 seconds).
+
+### Option B — Asset Bundle deploy (for development / customization)
+
+1. **Clone this project into your Databricks Workspace** (Workspace →
+   Clone from GitHub → paste this repo URL).
 2. **Open the Asset Bundle Editor** in the Databricks UI on the cloned
    project (it auto-detects `databricks.yml`).
-
 3. **Click "Deploy"**. The bundle deploys both:
-   - The `bdc-sharing` Databricks App (with the `sql` user-API scope already
-     set — no manual scope grant needed).
+   - The `bdc-sharing` Databricks App (with the `sql` user-API scope
+     already set — no manual scope grant needed).
    - The `bdc_publish` and `bdc_unpublish` notebooks at
      `<bundle-files>/notebooks/`, which the app calls at runtime.
-
-4. **Grant the app SP `CAN_USE` on at least one SQL warehouse.** The app
-   doesn't bind to a specific warehouse — users pick one from the in-app
-   dropdown at runtime, so the dropdown needs to be non-empty:
+4. **Grant the app SP `CAN_USE` on at least one SQL warehouse.** The DAB
+   path doesn't bind a warehouse to the app — users pick one from the
+   in-app dropdown at runtime, so the dropdown needs to be non-empty:
 
    ```bash
    databricks warehouses set-permissions <warehouse-id> \
@@ -35,10 +53,8 @@ guided UI.
        {"service_principal_name":"<bdc-sharing-sp-client-id>","permission_level":"CAN_USE"}
      ]}'
    ```
-
-5. **Open the App URL** and start publishing. The Activity tab launches a
-   one-time setup wizard the first time you visit (provisions or adopts a
-   Delta table for the audit log; takes 10 seconds).
+   (The Marketplace install path in Option A does this automatically.)
+5. **Open the App URL** and start publishing.
 
 ---
 
@@ -98,7 +114,7 @@ views.
 ```
 .
 ├── apps/bdc-sharing/        # Databricks App source
-│   ├── app.yaml             # Apps manifest
+│   ├── app.yaml             # Apps runtime config (command, env, scopes)
 │   ├── package.json         # Express + npm
 │   ├── public/              # Static UI (HTML/CSS/vanilla JS)
 │   └── server/              # Express backend (routes/, dbx.js, auth.js, …)
@@ -106,7 +122,8 @@ views.
 │   ├── bdc_publish.py       # Invoked by the app at runtime
 │   ├── bdc_unpublish.py     # Invoked by the app at runtime
 │   └── 00_smoke.py          # CI-only smoke test
-├── databricks.yml           # Asset Bundle (apps + smoke job)
+├── manifest.yaml            # Marketplace listing manifest (Option A install)
+├── databricks.yml           # Asset Bundle (Option B install — apps + smoke job)
 ├── requirements.txt         # Python deps for the notebooks
 └── env.example              # App env vars (sourced from app.yaml at deploy)
 ```
