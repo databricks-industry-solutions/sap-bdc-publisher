@@ -1,0 +1,14 @@
+version: 1
+name: "sap-bdc-publisher"
+description: "Publish Unity Catalog shares to SAP Business Data Cloud in a few clicks. Replaces the manual 4-step BDC Connect notebook workflow with a guided UI."
+
+resource_specs:
+  - name: "sql-warehouse"
+    description: "Serverless SQL warehouse used for SHOW/DESCRIBE on shares + activity-log writes. The customer-picked warehouse is auto-granted CAN_USE to the app service principal, which bootstraps the in-app warehouse dropdown. Users can switch to any other warehouse at runtime via the dropdown."
+    sql_warehouse_spec:
+      permission: "CAN_USE"
+
+user_api_scopes:
+  - "iam.current-user:read"
+  - "iam.access-control:read"
+  - "sql"
