@@ -126,9 +126,9 @@ databricks bundle deploy             # Deploy app + notebooks to your workspace
 databricks bundle run demo_workflow  # Sanity-check the SDK installs
 ```
 
-CI on every PR runs the same against `e2-demo-field-eng.cloud.databricks.com`
-(see `.github/workflows/databricks-ci.yml`) and tears down the deployment
-afterward.
+CI on every PR runs the same against the workspace configured via the
+`DATABRICKS_HOST` repo variable (see `.github/workflows/databricks-ci.yml`)
+and tears down the deployment afterward.
 
 ---
 
