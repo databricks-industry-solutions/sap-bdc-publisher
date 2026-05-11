@@ -13,9 +13,6 @@ guided UI.
 
 ## Installation
 
-Two install paths. Pick **Option A** if you just want to run the app.
-Pick **Option B** if you're developing or customizing it.
-
 ### Option A — Install from Databricks Marketplace (recommended)
 
 1. Open **Marketplace** in your Databricks workspace.
