@@ -13,43 +13,26 @@ guided UI.
 
 ## Installation
 
-### Option A — Install from Databricks Marketplace (recommended)
+This repo ships as a Databricks Solution Accelerator — a repo you clone
+into your workspace and deploy via the Asset Bundle Editor.
 
-One click. The install wizard provisions and deploys the app for you.
+1. **Get the code into your workspace**, either:
+   - **Marketplace**: find **SAP BDC Publisher** → click **Get access** →
+     pick a workspace folder. The repo is cloned for you.
+   - **GitHub direct**: in Databricks Workspace → **Clone from GitHub** →
+     paste this repo URL.
 
-1. Open **Marketplace** in your Databricks workspace.
-2. Find **SAP BDC Publisher** → click **Install**.
-3. In the in-workspace install wizard:
-   - Name the app and pick the workspace folder to deploy into.
-   - **Pick a SQL warehouse** from the dropdown. The wizard auto-grants
-     it `CAN_USE` to the app's service principal and binds its ID into
-     the app's runtime env (`DATABRICKS_WAREHOUSE_ID`), so the in-app
-     warehouse dropdown is pre-selected to your pick.
-   - Approve the requested OAuth scopes (`sql`, `iam.current-user:read`,
-     `iam.access-control:read`).
-4. Click **Install**. Deployment takes ~30–120 seconds. No follow-up
-   action required.
-5. Open the **app URL** from the wizard's success screen. The Activity
-   tab launches a one-time setup sub-wizard on first visit (provisions or
-   adopts a Delta table for the audit log; takes ~10 seconds).
+2. **Open the Asset Bundle Editor** on the cloned `databricks.yml` (the
+   UI auto-detects it).
 
-### Option B — Asset Bundle deploy (for development / customization)
-
-For contributors iterating on the app source. End users should use
-Option A.
-
-1. **Clone this project into your Databricks Workspace** (Workspace →
-   Clone from GitHub → paste this repo URL).
-2. **Open the Asset Bundle Editor** in the Databricks UI on the cloned
-   project (it auto-detects `databricks.yml`).
-3. **Click "Deploy"**. The bundle deploys both:
+3. **Click "Deploy"**. The bundle provisions:
    - The `bdc-sharing` Databricks App (with the `sql` user-API scope
      already set — no manual scope grant needed).
    - The `bdc_publish` and `bdc_unpublish` notebooks at
      `<bundle-files>/notebooks/`, which the app calls at runtime.
+
 4. **Grant the app SP `CAN_USE` on at least one SQL warehouse** so the
-   in-app dropdown is non-empty. The DAB path doesn't bind a warehouse
-   to the app (Marketplace install does — see Option A):
+   in-app warehouse dropdown is non-empty:
 
    ```bash
    databricks warehouses set-permissions <warehouse-id> \
@@ -57,7 +40,11 @@ Option A.
        {"service_principal_name":"<bdc-sharing-sp-client-id>","permission_level":"CAN_USE"}
      ]}'
    ```
-5. **Open the App URL** and start publishing.
+
+5. **Open the App URL** from the Asset Bundle UI and start publishing.
+   The Activity tab launches a one-time setup sub-wizard on first visit
+   (provisions or adopts a Delta table for the audit log; takes ~10
+   seconds).
 
 ---
 
@@ -125,8 +112,7 @@ views.
 │   ├── bdc_publish.py       # Invoked by the app at runtime
 │   ├── bdc_unpublish.py     # Invoked by the app at runtime
 │   └── 00_smoke.py          # CI-only smoke test
-├── manifest.yaml            # Marketplace listing manifest (Option A install)
-├── databricks.yml           # Asset Bundle (Option B install — apps + smoke job)
+├── databricks.yml           # Asset Bundle (apps + smoke job)
 ├── requirements.txt         # Python deps for the notebooks
 └── env.example              # App env vars (sourced from app.yaml at deploy)
 ```

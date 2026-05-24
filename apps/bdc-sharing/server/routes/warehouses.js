@@ -8,16 +8,12 @@ router.get('/', async (_req, res, next) => {
   try {
     const whs = await listWarehouses();
     const ranked = rankWarehouses(whs);
-    // Marketplace install binds the customer's pick via app.yaml's valueFrom:
-    // 'sql-warehouse'. Prefer it when present and visible to the SP.
-    const boundId = process.env.DATABRICKS_WAREHOUSE_ID || null;
-    const boundVisible = boundId && ranked.some((w) => w.id === boundId);
     res.json({
       warehouses: ranked.map((w) => ({
         id: w.id, name: w.name, size: w.cluster_size, state: w.state,
         serverless: !!w.enable_serverless_compute,
       })),
-      defaultId: boundVisible ? boundId : (ranked[0]?.id || null),
+      defaultId: ranked[0]?.id || null,
     });
   } catch (err) { next(err); }
 });

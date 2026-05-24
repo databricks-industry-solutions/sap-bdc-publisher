@@ -2,10 +2,6 @@ command: ['npm', 'run', 'start']
 env:
   - name: 'NODE_ENV'
     value: 'production'
-  # Bound at install time from the customer's Marketplace pick. The string
-  # 'sql-warehouse' must match resource_specs[].name in manifest.yaml.
-  - name: 'DATABRICKS_WAREHOUSE_ID'
-    valueFrom: 'sql-warehouse'
   # Leave the notebook paths empty for DAB-deployed installs — the app's
   # publish/unpublish routes auto-resolve them from the bundle layout. Set
   # explicitly only if you place the notebooks outside the bundle.
