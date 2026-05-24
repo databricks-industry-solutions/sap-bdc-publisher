@@ -20,7 +20,7 @@ resources:
     bdc_sharing_app:
       name: "bdc-sharing"
       description: "Publish Unity Catalog shares to SAP Business Data Cloud"
-      source_code_path: "/Users/${workspace.current_user.userName}/${var.project_name}-${var.environment}/files/apps/bdc-sharing"
+      source_code_path: "./apps/bdc-sharing"
       user_api_scopes:
         - sql
 
