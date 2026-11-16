@@ -8,12 +8,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app.css">
-<style>
-  .level { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin: 18px 0 4px; }
-  .check-actions { margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .check-actions input { background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; font-family: inherit; min-width: 220px; }
-  .summary { font-size: 15px; font-weight: 600; }
-</style>
 </head>
 <body>
 <div class="app">
@@ -40,7 +34,7 @@
       <div id="compute"></div>
     </section>
     <section class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <div class="check-head">
         <div id="summary" class="summary"><span class="loading"></span> Checking…</div>
         <button class="btn secondary btn-sm" id="recheck" type="button" disabled>Re-check</button>
       </div>
@@ -80,8 +74,8 @@ function render() {
   const failedReq = d.checks.filter((c) => c.level === 'required' && c.status !== 'ok');
   const warnRec = d.checks.filter((c) => c.level === 'recommended' && c.status !== 'ok');
   el('summary').innerHTML = failedReq.length
-    ? '<span style="color:var(--err)">Not ready.</span> ' + failedReq.length + ' required item(s) to fix' + (d.enforced ? '. Publishing is blocked.' : '. Publishing is allowed (BDC_REQUIRE_ACTIVITY_LOG=false), but actions may not be recorded.')
-    : '<span style="color:var(--ok)">Ready.</span> ' + (warnRec.length ? warnRec.length + ' recommended item(s) open.' : 'Everything required and recommended is in place.');
+    ? '<span class="text-err">Not ready.</span> ' + failedReq.length + ' required item(s) to fix' + (d.enforced ? '. Publishing is blocked.' : '. Publishing is allowed (BDC_REQUIRE_ACTIVITY_LOG=false), but actions may not be recorded.')
+    : '<span class="text-ok">Ready.</span> ' + (warnRec.length ? warnRec.length + ' recommended item(s) open.' : 'Everything required and recommended is in place.');
 
   const icon = { ok: '✓', warn: '!', fail: '✕', wait: '·' };
   const levels = [['required', 'Required'], ['recommended', 'Recommended'], ['optional', 'Optional']];
@@ -92,7 +86,7 @@ function render() {
       const code = c.sql ? c.sql.join(';\n') + ';' : (c.cli ? c.cli.join('\n') : '');
       let extra = '';
       if (code && c.status !== 'ok') {
-        extra += '<div class="copy-block"><pre class="code" style="white-space:pre-wrap">' + escHtml(code) + '</pre>' +
+        extra += '<div class="copy-block"><pre class="code wrap">' + escHtml(code) + '</pre>' +
           '<button class="btn secondary btn-sm" type="button" data-copy="' + escHtml(code) + '">Copy</button></div>';
       }
       if (c.action) {
@@ -127,7 +121,7 @@ async function migrate(btn) {
     load();
   } catch (e) {
     const sql = e.payload && e.payload.sql;
-    el('act-columns_v2').innerHTML = escHtml(e.message) + (sql ? '<pre class="code" style="white-space:pre-wrap">' + escHtml(sql) + '</pre>' : '');
+    el('act-columns_v2').innerHTML = escHtml(e.message) + (sql ? '<pre class="code wrap">' + escHtml(sql) + '</pre>' : '');
     btn.disabled = false;
   }
 }
@@ -139,10 +133,10 @@ async function createAibi(btn) {
   try {
     const r = await api('POST', '/api/setup/aibi', { warehouseId: state.wh, shareWith });
     el('act-aibi').innerHTML = (r.created ? 'Created. ' : 'Updated. ') + '<a href="' + escHtml(r.url) + '" target="_blank" rel="noopener">Open the AI/BI dashboard</a>' +
-      (r.shareError ? ' <span style="color:var(--err)">Sharing failed: ' + escHtml(r.shareError) + '</span>' : '');
+      (r.shareError ? ' <span class="text-err">Sharing failed: ' + escHtml(r.shareError) + '</span>' : '');
     setTimeout(load, 1500);
   } catch (e) {
-    el('act-aibi').innerHTML = '<span style="color:var(--err)">' + escHtml(e.message) + '</span>';
+    el('act-aibi').innerHTML = '<span class="text-err">' + escHtml(e.message) + '</span>';
     btn.disabled = false;
   }
 }
