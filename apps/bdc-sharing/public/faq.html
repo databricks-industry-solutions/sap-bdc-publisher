@@ -7,66 +7,22 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
 <style>
-  :root {
-    --bg: #F4F6FA; --bg-elev: #FFFFFF; --bg-tile: #FFFFFF;
-    --border: #E4E7EC; --border-strong: #CFD4DC;
-    --text: #0F172A; --text-muted: #64748B;
-    --accent: #FF3621; --accent-hover: #E5301D; --accent-dim: #FFE3DD;
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-    --radius-lg: 20px;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
-  body { background: radial-gradient(1200px 500px at 50% -200px, rgba(255, 54, 33, 0.05), transparent 70%), var(--bg); min-height: 100vh; }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-
-  .app { min-height: 100vh; display: flex; flex-direction: column; }
-  .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 40px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.85); backdrop-filter: saturate(180%) blur(8px); position: sticky; top: 0; z-index: 20; }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .brand-logo { width: 36px; height: 36px; background: linear-gradient(135deg, #FF3621, #FF6B47); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 19px; box-shadow: 0 3px 10px rgba(255,54,33,0.28); }
-  .brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.015em; }
-  .brand-sub { font-size: 12px; color: var(--text-muted); margin-left: 4px; font-weight: 400; }
-  .user-badge { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 6px 10px 6px 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
-  .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #FF3621, #FF6B47); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; }
-  .user-email { color: var(--text-muted); font-size: 12px; }
-  .header-actions { display: flex; align-items: center; gap: 16px; }
-  .header-actions a { color: var(--text-muted); font-size: 13px; font-weight: 500; transition: color 0.15s; }
-  .header-actions a:hover { color: var(--text); text-decoration: none; }
-  .header-actions a.nav-highlight { color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-dim); padding: 5px 12px; border-radius: 999px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s; }
-  .header-actions a.nav-highlight::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 0 rgba(255,54,33,0.45); animation: nav-pulse 2.2s ease-in-out infinite; }
-  .header-actions a.nav-highlight:hover { color: white; background: var(--accent); border-color: var(--accent); box-shadow: 0 2px 6px rgba(255,54,33,0.25); }
-  .header-actions a.nav-highlight:hover::before { background: white; box-shadow: none; animation: none; }
-  @keyframes nav-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,54,33,0.45); } 50% { box-shadow: 0 0 0 6px rgba(255,54,33,0); } }
-
-  .main { max-width: 880px; margin: 0 auto; padding: 48px 40px 80px; width: 100%; }
-  .welcome h1 { font-size: 32px; font-weight: 700; margin: 0 0 12px; letter-spacing: -0.028em; }
-  .welcome p { color: var(--text-muted); margin: 0 0 32px; max-width: 760px; font-size: 14.5px; }
-
-  .panel { background: var(--bg-tile); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 8px 28px; box-shadow: var(--shadow-sm); }
-  details { border-bottom: 1px solid var(--border); padding: 16px 0; }
-  details:last-child { border-bottom: none; }
-  details > summary { cursor: pointer; list-style: none; font-weight: 600; font-size: 15px; color: var(--text); padding-right: 28px; position: relative; }
-  details > summary::-webkit-details-marker { display: none; }
-  details > summary::after {
-    content: '+'; position: absolute; right: 0; top: -1px; font-size: 22px;
-    color: var(--text-muted); font-weight: 300; line-height: 1;
-    transition: transform 0.2s;
-  }
-  details[open] > summary::after { content: '−'; }
-  details > summary:hover { color: var(--accent); }
-  details > div { margin-top: 12px; color: var(--text); font-size: 13.5px; line-height: 1.65; }
-  details { scroll-margin-top: 90px; }
-  details p { margin: 8px 0; }
-  details p:first-child { margin-top: 0; }
-  details p:last-child { margin-bottom: 0; }
-  details ul { margin: 8px 0; padding-left: 20px; }
-  details li { margin: 4px 0; }
-  details code { font-family: 'Menlo', monospace; font-size: 12.5px; background: #F3F4F6; padding: 2px 6px; border-radius: 4px; color: #1F2937; }
-  details pre { background: #0F172A; color: #E2E8F0; padding: 12px 14px; border-radius: 8px; overflow-x: auto; margin: 10px 0; }
-  details pre code { background: transparent; color: inherit; padding: 0; font-size: 12.5px; }
-  details .muted { color: var(--text-muted); font-size: 12.5px; }
+  .faq { padding: 0 var(--space-5); }
+  .faq details { margin: 0; border-bottom: 1px solid var(--border); padding: 14px 0; scroll-margin-top: 64px; }
+  .faq details:last-child { border-bottom: none; }
+  .faq details > summary { display: block; width: auto; list-style: none; font-weight: 600; font-size: 14px; color: var(--text); padding-right: 28px; position: relative; }
+  .faq details > summary::-webkit-details-marker { display: none; }
+  .faq details > summary::after { content: ''; position: absolute; right: 4px; top: 5px; width: 7px; height: 7px; border-right: 1.5px solid var(--text-muted); border-bottom: 1.5px solid var(--text-muted); transform: rotate(45deg); transition: transform 0.15s; }
+  .faq details[open] > summary::after { transform: rotate(-135deg); top: 8px; }
+  .faq details > summary:hover { color: var(--accent); }
+  .faq details > div { margin-top: 10px; font-size: 13px; line-height: 1.6; }
+  .faq details p { margin: 8px 0; }
+  .faq details p:first-child { margin-top: 0; }
+  .faq details p:last-child { margin-bottom: 0; }
+  .faq details ul { margin: 8px 0; padding-left: 20px; }
+  .faq details li { margin: 4px 0; }
 </style>
 </head>
 <body>
@@ -74,26 +30,26 @@
   <header class="header">
     <div class="brand">
       <div class="brand-logo">D</div>
-      <div><div class="brand-name">Data Sharing <span class="brand-sub">FAQ</span></div></div>
+      <div><div class="brand-name">Data Sharing <span class="brand-sub">Databricks → SAP BDC</span></div></div>
     </div>
     <div class="header-actions">
       <a href="/">Publish</a>
       <a href="/dashboard.html">Dashboard</a>
       <a href="/activity.html">Activity</a>
       <a href="/setup.html">Setup</a>
-      <a href="/faq.html" style="color:var(--text);font-weight:600">FAQ</a>
+      <a href="/faq.html" class="active">FAQ</a>
       <a href="/docs.html" target="_blank">Documentation</a>
       <div id="user-badge" class="user-badge"></div>
     </div>
   </header>
 
-  <main class="main">
+  <main class="main narrow">
     <section class="welcome">
       <h1>FAQ</h1>
       <p>Everything that's worth knowing before you stare at a stuck publish job. Click any question to expand.</p>
     </section>
 
-    <section class="panel">
+    <section class="card faq">
       <details id="how-it-works">
         <summary>How does a publish work, and who runs which step?</summary>
         <div>
