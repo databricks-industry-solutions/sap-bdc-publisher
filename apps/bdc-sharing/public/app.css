@@ -65,7 +65,7 @@ code { font-family: var(--mono); font-size: 12px; }
 /* -------------------------------------------------------------- header */
 .header { display: flex; justify-content: space-between; align-items: stretch; height: 48px; padding: 0 var(--space-5); border-bottom: 1px solid var(--border); background: var(--bg-elev); position: sticky; top: 0; z-index: 20; gap: var(--space-4); }
 .brand { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
-.brand-logo { width: 24px; height: 24px; background: var(--brand); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; font-size: 13px; }
+.brand-logo { width: 24px; height: 24px; display: block; }
 .brand-name { font-weight: 600; font-size: 14px; white-space: nowrap; }
 .brand-sub { font-size: 13px; color: var(--text-muted); margin-left: var(--space-1); font-weight: 400; }
 .header-actions { display: flex; align-items: stretch; gap: var(--space-1); min-width: 0; }
@@ -367,3 +367,16 @@ pre.wrap, .copy-block pre.code { white-space: pre-wrap; overflow-wrap: anywhere;
 .prose table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13px; }
 .prose th, .prose td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; vertical-align: top; }
 .prose th { background: var(--bg-subtle); font-weight: 600; }
+
+/* Databricks to OpenSharing to SAP BDC strip (Publish page intro) */
+.welcome-flow { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-5); }
+.flow { display: flex; align-items: flex-start; gap: var(--space-2); flex-shrink: 0; padding: var(--space-3) var(--space-4); background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-muted); text-decoration: none; }
+.flow:hover { border-color: var(--border-strong); text-decoration: none; color: var(--text); }
+.flow-node { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 76px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+.flow-icon { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); }
+.flow-icon.round { border-radius: 50%; }
+.flow-icon img { width: 28px; height: 28px; object-fit: contain; }
+.flow-icon img.wide { width: 34px; height: auto; }
+.flow-line { width: 28px; margin-top: 22px; border-top: 2px dotted var(--border-strong); position: relative; }
+.flow-line::after { content: ''; position: absolute; right: -2px; top: -5px; border: 4px solid transparent; border-left: 5px solid var(--text-dim); }
+@media (max-width: 1000px) { .flow { display: none; } }
