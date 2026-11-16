@@ -29,7 +29,10 @@ function fillTable(raw, table) {
 }
 
 function dashboardUrl(id) {
-  return `${getWorkspaceHost()}/sql/dashboardsv3/${id}/published`;
+  // The UI route is /dashboardsv3/...; the older /sql/dashboardsv3/ prefix
+  // gives "page not found" on current workspaces.
+  const o = process.env.DATABRICKS_WORKSPACE_ID;
+  return `${getWorkspaceHost()}/dashboardsv3/${id}/published${o ? `?o=${encodeURIComponent(o)}` : ''}`;
 }
 
 export async function getAibiStatus() {
