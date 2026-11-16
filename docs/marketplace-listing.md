@@ -20,7 +20,8 @@ The SAP BDC Data Share App publishes Delta Sharing shares from Unity Catalog to 
 - Runs the BDC Connect SDK steps (metadata, CSN schema with your primary keys, publish) on serverless compute as the app's service principal.
 - Updates or unpublishes a share per BDC connection.
 - Dashboard: shares and tables in BDC, publish success and failures by reason, source changes since the last publish, and optional SAP read activity from the audit log.
-- Activity log of who published what, in a Delta table you choose.
+- Activity log of who published what, in a Delta table you choose. A Setup page checks it works before anyone can publish.
+- One-click AI/BI dashboard over the same data, published with each viewer's own permissions.
 
 **Requirements**
 
@@ -31,4 +32,4 @@ The SAP BDC Data Share App publishes Delta Sharing shares from Unity Catalog to 
 
 **Install**
 
-Install from Marketplace and open the app. No Asset Bundle is needed. To change the source, deploy the Asset Bundle from the GitHub repository instead.
+Install from Marketplace, open the app, set up the activity log, and check the Setup page. No Asset Bundle is needed. To change the source, deploy the Asset Bundle from the GitHub repository instead.

@@ -17,6 +17,10 @@ env:
     value: ''
   - name: 'BDC_ACTIVITY_ADMIN_GROUP'
     value: 'admins'
+  # Block publish/unpublish until the activity log works (Setup page), so
+  # every action is recorded. Set to 'false' to allow publishing without it.
+  - name: 'BDC_REQUIRE_ACTIVITY_LOG'
+    value: 'true'
   # Allow views in published shares. Keep false until BDC Connect support
   # for views is confirmed for your landscape (see FAQ).
   - name: 'BDC_ALLOW_VIEWS'

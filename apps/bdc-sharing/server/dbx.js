@@ -37,6 +37,9 @@ async function fetchWithToken(token, urlPath, init = {}) {
 }
 
 // SP-token-based helpers
+export async function spApi(method, urlPath, body) {
+  return fetchWithToken(await getSpToken(), urlPath, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
+}
 async function spGet(urlPath) { return fetchWithToken(await getSpToken(), urlPath, { method: 'GET' }); }
 async function spPost(urlPath, body) { return fetchWithToken(await getSpToken(), urlPath, { method: 'POST', body: JSON.stringify(body || {}) }); }
 

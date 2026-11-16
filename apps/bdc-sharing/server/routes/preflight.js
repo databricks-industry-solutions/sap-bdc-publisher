@@ -4,6 +4,7 @@ import { runPreflight } from '../lib/preflight.js';
 import { budgeted } from '../lib/budget.js';
 import { userKey } from '../lib/identity.js';
 import { noteWarehouse } from '../activity.js';
+import { assertReady } from '../lib/readiness.js';
 
 const router = Router();
 
@@ -18,6 +19,9 @@ router.post('/', (req, res, next) => {
     const e = new Error('shareName, recipientName and warehouseId are required'); e.status = 400; return next(e);
   }
   noteWarehouse(b.warehouseId);
+  // Same gate as publish, so the panel says "finish setup" up front.
+  assertReady(b.warehouseId).then(() => runBudgeted(), next);
+  function runBudgeted() {
   const hash = crypto.createHash('sha1').update(JSON.stringify([b.shareName, b.recipientName, b.warehouseId, b.primaryKeys || {}, b.applyGrants !== false])).digest('hex');
   budgeted(req, res, next, `preflight:${userKey(req)}:${hash}`,
     () => runPreflight(req, {
@@ -29,6 +33,7 @@ router.post('/', (req, res, next) => {
       refresh: !!b.refresh,
     }),
     { ttlMs: 10_000, refresh: !!b.refresh });
+  }
 });
 
 export default router;

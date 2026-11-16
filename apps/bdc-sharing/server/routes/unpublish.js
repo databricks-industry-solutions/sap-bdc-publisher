@@ -7,6 +7,7 @@ import { trackRun, getRunRecord, getPendingRevokes, clearPendingRevoke } from '.
 import { describeRun } from '../lib/runView.js';
 import { invalidate, mapLimit } from '../lib/budget.js';
 import { userKey } from '../lib/identity.js';
+import { assertReady } from '../lib/readiness.js';
 
 const router = Router();
 
@@ -33,6 +34,8 @@ router.post('/', async (req, res, next) => {
     const userEmail = user.email || user.userName;
     noteWarehouse(warehouseId);
     const notebookPath = await resolveNotebookPath();
+    // Nothing runs until the activity log works, so every action is recorded.
+    await assertReady(warehouseId);
     const submitted = await submitBdcUnpublishJob({
       notebookPath,
       parameters: { recipient_name: recipientName, share_name: shareName },

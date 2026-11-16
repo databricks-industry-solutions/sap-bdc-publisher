@@ -80,6 +80,7 @@
       <a href="/">Publish</a>
       <a href="/dashboard.html">Dashboard</a>
       <a href="/activity.html">Activity</a>
+      <a href="/setup.html">Setup</a>
       <a href="/faq.html" style="color:var(--text);font-weight:600">FAQ</a>
       <a href="/docs.html" target="_blank">Documentation</a>
       <div id="user-badge" class="user-badge"></div>
@@ -103,6 +104,13 @@
           </ul>
           <p>A publish is: pre-flight checks, <code>GRANT SELECT ON SHARE … TO RECIPIENT</code> as you, then a one-time job as the SP that runs <code>create_or_update_share</code>, generates the CSN schema (adding the keys you picked), uploads it, and calls <code>publish_data_product</code>.</p>
           <p><code>system.access.audit</code> shows the GRANT/REVOKE under your name and the SDK calls under the SP. The Activity page ties both together.</p>
+        </div>
+      </details>
+
+      <details id="setup">
+        <summary>How do I know the app is set up correctly?</summary>
+        <div>
+          <p>Open <a href="/setup.html">Setup</a>. It runs the checks on the warehouse you selected and shows a fix for each open item (a button, or SQL to copy). Required: activity table configured, app SP can read and write it. Recommended: table columns up to date, users can read it. Optional: SAP read KPIs, AI/BI dashboard.</p>
         </div>
       </details>
 
@@ -236,7 +244,7 @@ databricks secrets put-acl sap-bdc-connect-sdk &lt;app-sp-client-id&gt; READ</co
       <details id="aibi">
         <summary>Is there an AI/BI dashboard?</summary>
         <div>
-          <p>Yes. The app's Dashboard page has <strong>Download AI/BI dashboard</strong>. In Databricks, import the file on the Dashboards page with <em>Import dashboard from file</em>. The file already points at your activity table. Bundle installs get it deployed automatically.</p>
+          <p>Yes. On the <a href="/setup.html">Setup</a> page, click <strong>Create AI/BI dashboard</strong>. The app creates and publishes it with your activity table and the selected warehouse, gives you CAN MANAGE, and can share it with a group. Nothing to download or import. After an app update the same place offers <strong>Update dashboard</strong>.</p>
           <p>It runs with each viewer's own permissions: the Publishing page needs <code>SELECT</code> on the activity table, the SAP reads page needs <code>SELECT</code> on <code>system.access.audit</code>.</p>
         </div>
       </details>
@@ -255,10 +263,11 @@ GRANT SELECT ON TABLE system.access.audit TO `&lt;app-sp-client-id&gt;`;</code><
       <details id="activity-log">
         <summary>Do I have to set up the activity log?</summary>
         <div>
-          <p>No. Publish and unpublish work without it. The log adds the Activity page, the publishing KPIs on the Dashboard, and outcomes for jobs whose tab was closed (the app checks unfinished runs every minute and records their result).</p>
-          <p>Setup is on the Activity page: provision a new table (you need <code>MANAGE</code> on the catalog) or adopt one a catalog admin created. Scripted deploys can set <code>BDC_ACTIVITY_TABLE</code> in <code>app.yaml</code>.</p>
+          <p>Yes, by default. Publish and Unpublish stay blocked until the <a href="/setup.html">Setup</a> page's required checks pass: an activity table is configured, and the app SP can write to it on the selected warehouse. That way every action is recorded. An admin can turn this off with <code>BDC_REQUIRE_ACTIVITY_LOG=false</code>.</p>
+          <p>Create the table on the Activity page (you need <code>MANAGE</code> on the catalog) or adopt one a catalog admin created. Scripted deploys can set <code>BDC_ACTIVITY_TABLE</code> in <code>app.yaml</code>.</p>
+          <p>The log also gives you outcomes for jobs whose tab was closed (the app checks unfinished runs every minute) and the publishing KPIs on the Dashboard.</p>
           <p>Visibility: the Activity page and Dashboard filter to your own events unless you are in <code>BDC_ACTIVITY_ADMIN_GROUP</code>. That filter is applied by the app. Anyone with <code>SELECT</code> on the table can read every row in DBSQL, so grant it accordingly.</p>
-          <p>Tables created before v2 lack three columns (<code>bdc_connection</code>, <code>share_object_count</code>, <code>source_last_altered</code>). The table owner adds them with one click on the Activity page.</p>
+          <p>Tables created before v2 lack three columns (<code>bdc_connection</code>, <code>share_object_count</code>, <code>source_last_altered</code>). The table owner adds them with one click on the Setup page.</p>
         </div>
       </details>
 

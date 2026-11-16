@@ -10,19 +10,6 @@ variables:
     description: "Deployment environment (dev, staging, prod)"
     default: "dev"
 
-  warehouse_id:
-    description: "SQL warehouse for the AI/BI dashboard. Override with --var warehouse_id=<id>."
-    lookup:
-      warehouse: "Serverless Starter Warehouse"
-
-  activity_catalog:
-    description: "Catalog of the app's activity log table (used by the AI/BI dashboard)"
-    default: "main"
-
-  activity_schema:
-    description: "Schema of the app's activity log table; the table itself must be named 'activity'"
-    default: "bdc_sharing"
-
 targets:
   dev:
     default: true
@@ -38,17 +25,6 @@ resources:
       source_code_path: "./apps/bdc-sharing"
       user_api_scopes:
         - sql
-
-  dashboards:
-    bdc_sharing_dashboard:
-      display_name: "SAP BDC sharing"
-      file_path: "./apps/bdc-sharing/dashboards/bdc_sharing.lvdash.json"
-      warehouse_id: ${var.warehouse_id}
-      dataset_catalog: ${var.activity_catalog}
-      dataset_schema: ${var.activity_schema}
-      # Viewers query with their own permissions, so information_schema and
-      # the audit log show only what each viewer may see.
-      embed_credentials: false
 
   jobs:
     deploy_bdc_sharing_app:

@@ -142,6 +142,7 @@
       <a href="/">Publish</a>
       <a href="/dashboard.html">Dashboard</a>
       <a href="/activity.html" style="color:var(--text);font-weight:600">Activity</a>
+      <a href="/setup.html">Setup</a>
       <a href="/faq.html">FAQ</a>
       <a href="/docs.html" target="_blank">Documentation</a>
       <div id="user-badge" class="user-badge"></div>
@@ -303,7 +304,8 @@ function renderConfigFooter(table, source) {
   const sourceLabel = source === 'env' ? 'env var' : source === 'config' ? 'wizard' : '';
   footer.innerHTML =
     'Logging to <code>' + escHtml(table) + '</code>' +
-    (sourceLabel ? '<span class="config-source-badge">via ' + escHtml(sourceLabel) + '</span>' : '');
+    (sourceLabel ? '<span class="config-source-badge">via ' + escHtml(sourceLabel) + '</span>' : '') +
+    ' · <a href="/setup.html">Run the setup check</a>';
   el('activity-body').parentElement.appendChild(footer);
   checkMigration(footer);
 }

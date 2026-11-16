@@ -20,6 +20,7 @@
       <a href="/" class="active">Publish</a>
       <a href="/dashboard.html">Dashboard</a>
       <a href="/activity.html">Activity</a>
+      <a href="/setup.html">Setup</a>
       <a href="/faq.html">FAQ</a>
       <a href="/docs.html" target="_blank">Documentation</a>
       <div id="user-badge" class="user-badge"></div>
@@ -33,6 +34,7 @@
       <div id="compute"></div>
     </section>
 
+    <div id="setup-banner" class="banner"></div>
     <div id="banner" class="banner"></div>
 
     <section class="card">
@@ -92,8 +94,32 @@ function el(id) { return document.getElementById(id); }
 async function onWarehouseReady(id) {
   state.wh = id;
   // Finish any REVOKE left over from a delete whose tab was closed, then
-  // list shares. Both are independent; run them together.
-  await Promise.allSettled([finalizePending(), loadShares(false), loadLastPublished()]);
+  // list shares. All independent; run them together.
+  await Promise.allSettled([checkSetup(), finalizePending(), loadShares(false), loadLastPublished()]);
+}
+
+// Publishing is blocked server-side until the required setup checks pass.
+// Show that up front instead of letting the user hit it in the panel.
+async function checkSetup() {
+  try {
+    const r = await api('GET', '/api/setup/readiness?warehouseId=' + encodeURIComponent(state.wh));
+    state.setup = r;
+    const failed = r.checks.filter((c) => c.level === 'required' && c.status !== 'ok');
+    const html = failed.length
+      ? '<div class="msg ' + (r.enforced ? 'err' : 'warn') + '"><strong>' + (r.enforced ? 'Finish setup before publishing.' : 'Setup incomplete.') + '</strong> ' +
+        failed.map((c) => escHtml(c.label) + ': ' + escHtml(c.detail)).join(' ') +
+        ' <a class="btn secondary btn-sm" href="/setup.html">Open Setup</a></div>'
+      : '';
+    el('setup-banner').innerHTML = html;
+    if (state.overview) renderShares();
+  } catch (e) {
+    el('setup-banner').innerHTML = errorBox('Could not check setup:', e);
+  }
+}
+
+function setupBlocked() {
+  const r = state.setup;
+  return !!(r && r.enforced && !r.ready);
 }
 
 async function finalizePending() {
@@ -219,6 +245,7 @@ function renderShares() {
     (ov.cachedAgeMs != null ? ' · loaded ' + Math.round(ov.cachedAgeMs / 1000) + 's ago' : '') + '</div>';
 
   el('shares').querySelectorAll('[data-act]').forEach((b) => {
+    if (setupBlocked() && b.getAttribute('data-act') !== 'finish') { b.disabled = true; b.title = 'Finish setup first'; return; }
     b.onclick = () => {
       const act = b.getAttribute('data-act');
       if (act === 'finish') return finalizePending();

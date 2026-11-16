@@ -49,12 +49,7 @@ deploy.
    source under `./apps/bdc-sharing/` to a bundle-managed workspace
    path, registers the `bdc-sharing` Databricks App resource (with the
    `sql` user-API scope already set), stages the
-   `bdc_publish` / `bdc_unpublish` notebooks the app calls at runtime,
-   and creates the **SAP BDC sharing** AI/BI dashboard. The dashboard
-   uses the warehouse named "Serverless Starter Warehouse" and expects
-   the activity table at `main.bdc_sharing.activity`; override with
-   `--var warehouse_id=<id> --var activity_catalog=<catalog> --var activity_schema=<schema>`
-   when deploying from the CLI.
+   `bdc_publish` / `bdc_unpublish` notebooks the app calls at runtime.
    The app itself comes up **UNAVAILABLE** at this point: bundle
    deploy does not bind source to the app on its own.
 
@@ -75,10 +70,10 @@ deploy.
      ]}'
    ```
 
-6. **Open the App URL** from the App's page and start publishing. The
-   Activity tab launches a one-time setup sub-wizard on first visit
-   (provisions or adopts a Delta table for the audit log; takes ~10
-   seconds).
+6. **Open the App URL**, set up the activity log on the Activity page
+   (provisions or adopts a Delta table; takes ~10 seconds), then open
+   **Setup** and make sure the required checks are green. Publishing is
+   blocked until they are.
 
 ---
 
@@ -141,6 +136,26 @@ Reliability:
 
 ---
 
+## First run: Setup page
+
+Open **Setup** in the app before anyone publishes. It checks, on the
+warehouse you selected:
+
+| Level | Check |
+|---|---|
+| Required | An activity table is configured (Activity page wizard, or `BDC_ACTIVITY_TABLE`). |
+| Required | The app SP can read and write it on this warehouse (one probe row is inserted and deleted). |
+| Recommended | The table has the v2 columns (one click adds them). |
+| Recommended | You can read the table; other users need `SELECT` to see the Activity page and dashboards. |
+| Optional | The app SP can read `system.access.audit` (SAP read KPIs). |
+| Optional | The AI/BI dashboard exists and is current. |
+
+Until the required checks pass, Publish and Unpublish are blocked in the UI
+and refused by the server (HTTP 412), so every action is recorded. Set
+`BDC_REQUIRE_ACTIVITY_LOG=false` to allow publishing without the log.
+
+---
+
 ## Dashboard
 
 One page, three tiers. A tier that isn't set up shows the exact step to
@@ -152,13 +167,16 @@ enable it instead of an error.
 | Publishing | the activity log | publish success rate, activity per day, failures by reason (linked to the FAQ), last publish per share, top publishers (admins) |
 | SAP reads | optional grant to the app SP (below) | queries, rows and bytes read per BDC connection, share and table, last read per share |
 
-The same data is available as an **AI/BI dashboard**
-(`apps/bdc-sharing/dashboards/bdc_sharing.lvdash.json`) for slicing,
+The same data is available as an **AI/BI dashboard** for slicing,
 schedules and sharing: two pages (Publishing, SAP reads) with date, share
-and BDC connection filters. The bundle deploys it; Marketplace installs
-download it from the app's Dashboard page (the file comes with your
-activity table filled in) and use *Import dashboard from file*. It runs
-with each viewer's permissions.
+and BDC connection filters. Create it with one click on the Setup page:
+the app's service principal creates it from
+`apps/bdc-sharing/dashboards/bdc_sharing.lvdash.json` with your activity
+table and the selected warehouse, publishes it with viewer credentials (each
+viewer queries with their own permissions), gives you `CAN MANAGE`, and
+optionally shares it with a group. It lands in `/Workspace/Shared/SAP BDC
+sharing` (or the app SP's home folder if Shared isn't writable). After an
+app update, the Setup page offers "Update dashboard".
 
 A "Needs attention" list collects: source changed after publish (Update in
 BDC), revoke pending (Finish), last publish failed, and published but not
@@ -186,6 +204,7 @@ All optional, set in `app.yaml`.
 | Variable | Default | Effect |
 |---|---|---|
 | `BDC_ACTIVITY_TABLE` | empty | Pin the activity log table (3-part name). Empty means the in-app wizard sets it. |
+| `BDC_REQUIRE_ACTIVITY_LOG` | `true` | Block publish/unpublish until the Setup page's required checks pass. |
 | `BDC_ACTIVITY_ADMIN_GROUP` | `admins` | Members see all users' events on the Activity page and Dashboard. |
 | `BDC_RECIPIENT_PATTERN` | `bdc.*connect\|connect.*bdc` | Regex that marks a recipient as a BDC connection. |
 | `BDC_ALLOW_VIEWS` | `false` | Allow views in published shares once BDC Connect support is confirmed for your landscape. |
@@ -206,7 +225,7 @@ shares.
 ├── apps/bdc-sharing/        # Databricks App source: everything that ships to Marketplace
 │   ├── README.md            # In-app docs, served at /README.md (identical to this file)
 │   ├── app.yaml             # Apps runtime config (command, env, scopes)
-│   ├── dashboards/          # AI/BI dashboard (deployed by the bundle, downloadable in the app)
+│   ├── dashboards/          # AI/BI dashboard template (the app creates it from the Setup page)
 │   ├── manifest.yaml        # Databricks Marketplace listing manifest
 │   ├── package.json         # Express + npm
 │   ├── notebooks/
@@ -216,7 +235,7 @@ shares.
 │   └── server/              # Express backend: routes/, lib/ (request budget, pre-flight, SP grants), runs.js (reconciler), activity.js, dbx.js, …
 ├── notebooks/
 │   └── deploy_app.py        # DAB-only deploy job: binds app source + grants SP read (Option B)
-├── databricks.yml           # Asset Bundle definition (Option B install path): app, deploy job, AI/BI dashboard
+├── databricks.yml           # Asset Bundle definition (Option B install path): app and deploy job
 ├── requirements.txt         # Python deps for the runtime notebooks
 └── env.example              # App env vars (mirrored from app.yaml for local reference)
 ```

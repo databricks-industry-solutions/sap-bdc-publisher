@@ -18,7 +18,9 @@ import { Router } from 'express';
 import { sqlQuery, executeStatement, spExecuteStatement } from '../dbx.js';
 import { requireRequestUser } from '../auth.js';
 import { getActivityConfig, setActivityTable, getActivityTable } from '../config.js';
-import { getActivityColumns, forgetActivityColumns, V2_COLUMNS } from '../activity.js';
+import { getActivityColumns, forgetActivityColumns, V2_COLUMNS, noteWarehouse } from '../activity.js';
+import { computeReadiness, forgetReadiness } from '../lib/readiness.js';
+import { createOrUpdateAibi, getAibiStatus } from '../lib/aibi.js';
 import crypto from 'node:crypto';
 
 const router = Router();
@@ -224,6 +226,7 @@ router.post('/activity', async (req, res, next) => {
       });
     }
     results.push({ name: 'Save app config', status: 'ok' });
+    forgetReadiness();
 
     res.json({
       ok: true,
@@ -339,6 +342,7 @@ router.post('/adopt-activity', async (req, res, next) => {
       });
     }
     probes.push({ name: 'Save app config', status: 'ok' });
+    forgetReadiness();
 
     res.json({
       ok: true,
@@ -346,6 +350,35 @@ router.post('/adopt-activity', async (req, res, next) => {
       source: persisted.source,
       probes,
     });
+  } catch (err) { next(err); }
+});
+
+// GET /api/setup/readiness?warehouseId=…
+// The Setup page checklist. Required items gate publishing.
+router.get('/readiness', async (req, res, next) => {
+  try {
+    const warehouseId = String(req.query.warehouseId || '');
+    if (!warehouseId) { const err = new Error('warehouseId is required'); err.status = 400; throw err; }
+    noteWarehouse(warehouseId);
+    res.json(await computeReadiness(req, warehouseId));
+  } catch (err) { next(err); }
+});
+
+// GET /api/setup/aibi — does the app's AI/BI dashboard exist, is it current?
+router.get('/aibi', async (_req, res, next) => {
+  try { res.json(await getAibiStatus()); } catch (err) { next(err); }
+});
+
+// POST /api/setup/aibi  Body: { warehouseId, shareWith? }
+// Creates (or updates to the shipped version) and publishes the AI/BI
+// dashboard. The caller gets CAN_MANAGE; shareWith (a group) gets CAN_RUN.
+router.post('/aibi', async (req, res, next) => {
+  try {
+    const user = requireRequestUser(req);
+    const { warehouseId, shareWith } = req.body || {};
+    if (!warehouseId) { const err = new Error('warehouseId is required'); err.status = 400; throw err; }
+    if (shareWith && !/^[\w .@-]{1,255}$/.test(shareWith)) { const err = new Error('Invalid group name'); err.status = 400; throw err; }
+    res.json(await createOrUpdateAibi({ warehouseId, userEmail: user.email || user.userName, shareWith: shareWith || null }));
   } catch (err) { next(err); }
 });
 
@@ -375,6 +408,7 @@ router.post('/migrate-activity', async (req, res, next) => {
       });
     }
     forgetActivityColumns();
+    forgetReadiness();
     res.json({ ok: true, added: missing.map((c) => c.name), sql });
   } catch (err) { next(err); }
 });

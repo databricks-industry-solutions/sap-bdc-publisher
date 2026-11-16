@@ -32,6 +32,7 @@
       <a href="/">Publish</a>
       <a href="/dashboard.html" class="active">Dashboard</a>
       <a href="/activity.html">Activity</a>
+      <a href="/setup.html">Setup</a>
       <a href="/faq.html">FAQ</a>
       <a href="/docs.html" target="_blank">Documentation</a>
       <div id="user-badge" class="user-badge"></div>
@@ -82,9 +83,9 @@
       <div id="usage"></div>
     </section>
     <section class="card">
-      <h2>Open in AI/BI</h2>
-      <div class="muted">The same data as an AI/BI dashboard you can slice, schedule and share in Databricks. Download the file, then on the Dashboards page choose <em>Import dashboard from file</em>. It runs with each viewer's own permissions.</div>
-      <div class="actions"><a class="btn secondary btn-sm" href="/api/dashboard/aibi-file" id="aibi-download">Download AI/BI dashboard</a></div>
+      <h2>AI/BI dashboard</h2>
+      <div class="muted">The same data as an AI/BI dashboard you can slice, schedule and share in Databricks. It runs with each viewer's own permissions.</div>
+      <div id="aibi" style="margin-top:10px"><span class="loading"></span></div>
     </section>
   </main>
 </div>
@@ -108,7 +109,22 @@ function el(id) { return document.getElementById(id); }
   el('refresh').onclick = () => load(true);
   renderSkeleton();
   BDC.mountCompute(el('compute'), (id) => { state.wh = id; load(false); });
+  loadAibi();
 })();
+
+async function loadAibi() {
+  try {
+    const st = await api('GET', '/api/setup/aibi');
+    if (st.exists) {
+      el('aibi').innerHTML = '<a class="btn secondary btn-sm" href="' + escHtml(st.url) + '" target="_blank" rel="noopener">Open AI/BI dashboard</a>' +
+        (st.outdated ? ' <span class="muted">A newer version ships with this app. Update it on the <a href="/setup.html">Setup</a> page.</span>' : '');
+    } else {
+      el('aibi').innerHTML = '<span class="muted">Not created yet. Create it with one click on the <a href="/setup.html">Setup</a> page.</span>';
+    }
+  } catch (e) {
+    el('aibi').innerHTML = errorBox('Could not check the AI/BI dashboard:', e);
+  }
+}
 
 function renderSkeleton() {
   el('kpis').innerHTML = ['Shares in BDC', 'Tables in BDC', 'Publish success', 'SAP reads'].map((l) =>

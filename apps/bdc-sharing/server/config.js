@@ -176,7 +176,10 @@ export async function setActivityTable({ table, configuredBy }) {
   if (!table || typeof table !== 'string') {
     throw new Error('setActivityTable requires a non-empty table name');
   }
+  // Keep other keys (e.g. the AI/BI dashboard id) when the table changes.
+  const existing = (await readConfigFile().catch(() => null)) || {};
   const payload = {
+    ...existing,
     version: CONFIG_VERSION,
     activityTable: table,
     configuredBy: configuredBy || null,
@@ -188,8 +191,26 @@ export async function setActivityTable({ table, configuredBy }) {
   return cache.resolved;
 }
 
+// Other app settings stored in the same SP-owned config file (for example
+// the AI/BI dashboard id). Values are merged, never replaced wholesale.
+let extraCache = null;
+export async function getAppSetting(key) {
+  if (!extraCache) {
+    try { extraCache = (await readConfigFile()) || {}; } catch { extraCache = {}; }
+  }
+  return extraCache[key] == null ? null : extraCache[key];
+}
+export async function setAppSettings(values) {
+  const existing = (await readConfigFile().catch(() => null)) || { version: CONFIG_VERSION };
+  const payload = { ...existing, ...values, version: CONFIG_VERSION };
+  await writeConfigFile(payload);
+  extraCache = payload;
+  return payload;
+}
+
 // Used by tests/dev to drop the cache and re-read.
 export function _resetConfigCache() {
+  extraCache = null;
   cache.resolved = null;
   cache.spWorkspacePath = null;
 }

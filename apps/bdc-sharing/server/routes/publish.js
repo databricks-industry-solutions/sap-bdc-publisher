@@ -7,6 +7,7 @@ import { trackRun, clearPendingRevoke } from '../runs.js';
 import { describeRun } from '../lib/runView.js';
 import { invalidate } from '../lib/budget.js';
 import { userKey } from '../lib/identity.js';
+import { assertReady } from '../lib/readiness.js';
 
 const router = Router();
 
@@ -38,6 +39,8 @@ router.post('/', async (req, res, next) => {
     const userEmail = user.email || user.userName;
     const action = republish ? 'republish' : 'publish';
     noteWarehouse(warehouseId);
+    // Nothing runs until the activity log works, so every action is recorded.
+    await assertReady(warehouseId);
 
     // The GRANT runs as the user via OBO. If they can't grant, fail before
     // a job starts.

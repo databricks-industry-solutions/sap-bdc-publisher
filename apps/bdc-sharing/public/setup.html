@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Setup: Databricks to SAP BDC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+<style>
+  .level { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin: 18px 0 4px; }
+  .check-actions { margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .check-actions input { background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; font-family: inherit; min-width: 220px; }
+  .summary { font-size: 15px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="brand">
+      <div class="brand-logo">D</div>
+      <div><div class="brand-name">Data Sharing <span class="brand-sub">Databricks → SAP BDC</span></div></div>
+    </div>
+    <div class="header-actions">
+      <a href="/">Publish</a>
+      <a href="/dashboard.html">Dashboard</a>
+      <a href="/activity.html">Activity</a>
+      <a href="/setup.html" class="active">Setup</a>
+      <a href="/faq.html">FAQ</a>
+      <a href="/docs.html" target="_blank">Documentation</a>
+      <div id="user-badge" class="user-badge"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="welcome">
+      <h1>Setup</h1>
+      <p>Checks that the app is ready before anyone publishes. Required items must pass; until then, Publish and Unpublish are blocked so every action ends up in the activity log.</p>
+      <div id="compute"></div>
+    </section>
+    <section class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <div id="summary" class="summary"><span class="loading"></span> Checking…</div>
+        <button class="btn secondary btn-sm" id="recheck" type="button" disabled>Re-check</button>
+      </div>
+      <div id="msg"></div>
+      <div id="checks"></div>
+    </section>
+  </main>
+</div>
+
+<script src="/common.js"></script>
+<script>
+const { api, escHtml, errorBox } = window.BDC;
+const state = { wh: null, data: null, busy: null };
+function el(id) { return document.getElementById(id); }
+
+BDC.renderUserBadge('user-badge');
+el('recheck').onclick = () => load();
+BDC.mountCompute(el('compute'), (id) => { state.wh = id; load(); });
+
+async function load() {
+  el('recheck').disabled = true;
+  el('summary').innerHTML = '<span class="loading"></span> Checking… (this writes and deletes one probe row in the activity table)';
+  try {
+    state.data = await api('GET', '/api/setup/readiness?warehouseId=' + encodeURIComponent(state.wh));
+    render();
+  } catch (e) {
+    el('summary').textContent = 'Setup check failed';
+    el('checks').innerHTML = errorBox('Could not run the checks:', e, 'retry');
+    el('retry').onclick = load;
+  } finally {
+    el('recheck').disabled = false;
+  }
+}
+
+function render() {
+  const d = state.data;
+  const failedReq = d.checks.filter((c) => c.level === 'required' && c.status !== 'ok');
+  const warnRec = d.checks.filter((c) => c.level === 'recommended' && c.status !== 'ok');
+  el('summary').innerHTML = failedReq.length
+    ? '<span style="color:var(--err)">Not ready.</span> ' + failedReq.length + ' required item(s) to fix' + (d.enforced ? '. Publishing is blocked.' : '. Publishing is allowed (BDC_REQUIRE_ACTIVITY_LOG=false), but actions may not be recorded.')
+    : '<span style="color:var(--ok)">Ready.</span> ' + (warnRec.length ? warnRec.length + ' recommended item(s) open.' : 'Everything required and recommended is in place.');
+
+  const icon = { ok: '✓', warn: '!', fail: '✕', wait: '·' };
+  const levels = [['required', 'Required'], ['recommended', 'Recommended'], ['optional', 'Optional']];
+  el('checks').innerHTML = levels.map(([lvl, title]) => {
+    const items = d.checks.filter((c) => c.level === lvl);
+    if (!items.length) return '';
+    return '<div class="level">' + title + '</div><ul class="checklist">' + items.map((c) => {
+      const code = c.sql ? c.sql.join(';\n') + ';' : (c.cli ? c.cli.join('\n') : '');
+      let extra = '';
+      if (code && c.status !== 'ok') {
+        extra += '<div class="copy-block"><pre class="code" style="white-space:pre-wrap">' + escHtml(code) + '</pre>' +
+          '<button class="btn secondary btn-sm" type="button" data-copy="' + escHtml(code) + '">Copy</button></div>';
+      }
+      if (c.action) {
+        extra += '<div class="check-actions">';
+        if (c.action.kind === 'link') {
+          extra += '<a class="btn secondary btn-sm" href="' + escHtml(c.action.href) + '"' + (c.action.external ? ' target="_blank" rel="noopener"' : '') + '>' + escHtml(c.action.label) + '</a>';
+        } else if (c.action.kind === 'migrate') {
+          extra += '<button class="btn secondary btn-sm" type="button" data-act="migrate">' + escHtml(c.action.label) + '</button>';
+        } else if (c.action.kind === 'aibi') {
+          extra += '<input id="share-with" placeholder="Share with group (optional)" />' +
+            '<button class="btn primary btn-sm" type="button" data-act="aibi">' + escHtml(c.action.label) + '</button>';
+        }
+        extra += '<span class="muted" id="act-' + c.id + '"></span></div>';
+      }
+      return '<li class="' + (c.status === 'wait' ? 'wait' : c.status) + '"><span class="icon">' + icon[c.status] + '</span><div>' +
+        '<div>' + escHtml(c.label) + '</div><div class="detail">' + escHtml(c.detail) + '</div>' + extra + '</div></li>';
+    }).join('') + '</ul>';
+  }).join('');
+
+  el('checks').querySelectorAll('[data-copy]').forEach((b) => {
+    b.onclick = () => { navigator.clipboard && navigator.clipboard.writeText(b.getAttribute('data-copy')); b.textContent = 'Copied'; };
+  });
+  el('checks').querySelectorAll('[data-act="migrate"]').forEach((b) => { b.onclick = () => migrate(b); });
+  el('checks').querySelectorAll('[data-act="aibi"]').forEach((b) => { b.onclick = () => createAibi(b); });
+}
+
+async function migrate(btn) {
+  btn.disabled = true;
+  el('act-columns_v2').textContent = 'Altering table…';
+  try {
+    await api('POST', '/api/setup/migrate-activity', { warehouseId: state.wh });
+    load();
+  } catch (e) {
+    const sql = e.payload && e.payload.sql;
+    el('act-columns_v2').innerHTML = escHtml(e.message) + (sql ? '<pre class="code" style="white-space:pre-wrap">' + escHtml(sql) + '</pre>' : '');
+    btn.disabled = false;
+  }
+}
+
+async function createAibi(btn) {
+  btn.disabled = true;
+  const shareWith = (el('share-with') && el('share-with').value.trim()) || undefined;
+  el('act-aibi').textContent = 'Creating and publishing…';
+  try {
+    const r = await api('POST', '/api/setup/aibi', { warehouseId: state.wh, shareWith });
+    el('act-aibi').innerHTML = (r.created ? 'Created. ' : 'Updated. ') + '<a href="' + escHtml(r.url) + '" target="_blank" rel="noopener">Open the AI/BI dashboard</a>' +
+      (r.shareError ? ' <span style="color:var(--err)">Sharing failed: ' + escHtml(r.shareError) + '</span>' : '');
+    setTimeout(load, 1500);
+  } catch (e) {
+    el('act-aibi').innerHTML = '<span style="color:var(--err)">' + escHtml(e.message) + '</span>';
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
