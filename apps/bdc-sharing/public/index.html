@@ -202,7 +202,7 @@ function renderShares() {
   }
   const hiddenNotOwned = ov.shares.filter((s) => !s.isOwner).length;
   if (!state.showAll && hiddenNotOwned) {
-    notes.push('<div class="muted" style="margin-bottom:8px">' + hiddenNotOwned + ' share(s) you don\'t own are hidden. Publishing those needs <code>USE SHARE</code> and <code>SET SHARE PERMISSION</code>.</div>');
+    notes.push('<div class="muted mb-2">' + hiddenNotOwned + ' share(s) you don\'t own are hidden. Publishing those needs <code>USE SHARE</code> and <code>SET SHARE PERMISSION</code>.</div>');
   }
   el('shares-msg').innerHTML = notes.join('');
 
@@ -239,9 +239,9 @@ function renderShares() {
   }).join('');
 
   el('shares').innerHTML =
-    '<table class="grid"><thead><tr><th>Share</th><th style="text-align:right">Tables</th><th>BDC connections</th><th>Last published</th><th>Status</th><th></th></tr></thead>' +
+    '<table class="grid"><thead><tr><th>Share</th><th class="num">Tables</th><th>BDC connections</th><th>Last published</th><th>Status</th><th></th></tr></thead>' +
     '<tbody>' + rows + '</tbody></table>' +
-    '<div class="muted" style="margin-top:10px">' + visible.length + ' of ' + ov.shares.length + ' share(s) · ' + conns.length + ' BDC connection(s)' +
+    '<div class="muted mt-3">' + visible.length + ' of ' + ov.shares.length + ' share(s) · ' + conns.length + ' BDC connection(s)' +
     (ov.cachedAgeMs != null ? ' · loaded ' + Math.round(ov.cachedAgeMs / 1000) + 's ago' : '') + '</div>';
 
   el('shares').querySelectorAll('[data-act]').forEach((b) => {
@@ -377,7 +377,7 @@ function renderPanel() {
   const conns = state.overview.connections || [];
   if (p.mode === 'republish') {
     html += '<div class="section"><h3>BDC connection</h3><code>' + escHtml(p.connection) + '</code>' +
-      '<div class="muted" style="margin-top:4px">Re-sends the metadata and schema to BDC and publishes again. The grant on the share stays as it is.</div></div>';
+      '<div class="muted mt-1">Re-sends the metadata and schema to BDC and publishes again. The grant on the share stays as it is.</div></div>';
   } else {
     const open = conns.filter((c) => !p.share.bdcConnections.some((b) => b.name === c.name));
     html += '<div class="section"><h3>BDC connection</h3>' +
@@ -453,11 +453,11 @@ function renderPreflight(p) {
     let extra = '';
     if (c.sql && c.sql.length) {
       const text = c.sql.join(c.fixKind === 'cli' ? '\n' : ';\n') + (c.fixKind === 'cli' ? '' : ';');
-      extra = '<div class="copy-block"><pre class="code" style="white-space:pre-wrap">' + escHtml(text) + '</pre>' +
+      extra = '<div class="copy-block"><pre class="code wrap">' + escHtml(text) + '</pre>' +
         '<button class="btn secondary btn-sm" type="button" data-copy="' + escHtml(text) + '">Copy</button></div>';
     }
     if (c.errors && c.errors.length) {
-      extra += '<details><summary>Show errors</summary><pre class="code" style="white-space:pre-wrap">' + escHtml(c.errors.join('\n')) + '</pre></details>';
+      extra += '<details><summary>Show errors</summary><pre class="code wrap">' + escHtml(c.errors.join('\n')) + '</pre></details>';
     }
     return '<li class="' + c.status + '"><span class="icon">' + icon[c.status] + '</span><div><div>' + escHtml(c.label) + '</div>' +
       '<div class="detail">' + escHtml(c.detail) + '</div>' + extra + '</div></li>';
@@ -474,14 +474,14 @@ function renderPkSection(p) {
   }
   const tables = p.detail.tables.filter((t) => t.columnsKnown !== false && !t.hasPrimaryKey);
   if (!tables.length) return '';
-  let html = '<div class="section"><h3>Pick primary keys</h3><div class="muted" style="margin-bottom:8px">These tables have no primary key in Unity Catalog. Pick the key columns and the app adds them to the schema it sends to BDC.</div>';
+  let html = '<div class="section"><h3>Pick primary keys</h3><div class="muted mb-2">These tables have no primary key in Unity Catalog. Pick the key columns and the app adds them to the schema it sends to BDC.</div>';
   tables.forEach((t) => {
     const sel = p.pkSel[t.sharedAs] || [];
     html += '<div class="pk-table ' + (sel.length ? 'defined' : 'missing') + '">' +
       '<div class="pk-table-head"><div class="pk-table-name">' + escHtml(t.sharedAs) + '</div>' +
       '<span class="badge ' + (sel.length ? 'table' : 'view') + '">' + (sel.length ? 'Key: ' + sel.map(escHtml).join(', ') : 'No key') + '</span></div>';
     if (!t.columns || !t.columns.length) {
-      html += '<div class="muted" style="margin-top:8px">Column list not visible to you, so a key can\'t be picked here. The table publishes without a key annotation.</div>';
+      html += '<div class="muted mt-2">Column list not visible to you, so a key can\'t be picked here. The table publishes without a key annotation.</div>';
     } else {
       html += renderPkChips(t.sharedAs, sel) + renderPkList(p, t);
     }
@@ -513,7 +513,7 @@ function renderPkList(p, t) {
   visible.forEach((c) => {
     const on = sel.includes(c.name);
     html += '<div class="pk-item ' + (on ? 'selected' : '') + '" data-pk-toggle data-pk-table="' + escHtml(t.sharedAs) + '" data-pk-col="' + escHtml(c.name) + '">' +
-      '<span class="col-name">' + escHtml(c.name) + '</span><span style="display:flex;gap:8px;align-items:center">' +
+      '<span class="col-name">' + escHtml(c.name) + '</span><span class="row">' +
       (c.type ? '<span class="col-type">' + escHtml(c.type) + '</span>' : '') + (on ? '<span class="col-check">✓</span>' : '') + '</span></div>';
   });
   if (filtered.length > visible.length) html += '<div class="pk-list-footer">Showing ' + visible.length + ' of ' + filtered.length + '. Scroll for more.</div>';
@@ -686,12 +686,12 @@ function wireRunState(p) {
 function renderJobError(r) {
   const err = r.error || {};
   let html = '<div class="msg err"><strong>' + (state.panel && state.panel.mode === 'unpublish' ? 'Removal failed.' : 'Publish failed.') + '</strong>';
-  if (err.message) html += '<div style="margin-top:6px">' + escHtml(err.message) + '</div>';
-  else if (r.stateMessage) html += '<div style="margin-top:6px">' + escHtml(r.stateMessage) + '</div>';
+  if (err.message) html += '<div class="mt-2">' + escHtml(err.message) + '</div>';
+  else if (r.stateMessage) html += '<div class="mt-2">' + escHtml(r.stateMessage) + '</div>';
   const hint = failureHint(err.message || r.stateMessage || '');
-  if (hint) html += '<div style="margin-top:6px">' + hint + '</div>';
-  if (err.trace) html += '<details><summary>Show traceback</summary><pre class="code" style="white-space:pre-wrap">' + escHtml(String(err.trace).trim()) + '</pre></details>';
-  if (err.logs) html += '<details><summary>Show logs' + (err.logsTruncated ? ' (truncated)' : '') + '</summary><pre class="code" style="white-space:pre-wrap">' + escHtml(err.logs) + '</pre></details>';
+  if (hint) html += '<div class="mt-2">' + hint + '</div>';
+  if (err.trace) html += '<details><summary>Show traceback</summary><pre class="code wrap">' + escHtml(String(err.trace).trim()) + '</pre></details>';
+  if (err.logs) html += '<details><summary>Show logs' + (err.logsTruncated ? ' (truncated)' : '') + '</summary><pre class="code wrap">' + escHtml(err.logs) + '</pre></details>';
   return html + '</div>';
 }
 
