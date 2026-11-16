@@ -4,10 +4,11 @@
 [![Unity Catalog](https://img.shields.io/badge/Unity_Catalog-Enabled-00A1C9?style=for-the-badge)](https://docs.databricks.com/en/data-governance/unity-catalog/index.html)
 [![Delta Sharing](https://img.shields.io/badge/Delta_Sharing-Required-1B3139?style=for-the-badge)](https://docs.databricks.com/en/delta-sharing/index.html)
 
-A Databricks App that automates publishing a Unity Catalog share to SAP
-Business Data Cloud (BDC Connect) in a few clicks. Replaces the manual
-notebook workflow (run SQL, call BDC SDK, publish data product) with a
-guided UI.
+A Databricks App that publishes Unity Catalog shares to SAP Business Data
+Cloud (BDC Connect). Pick a share, pick a BDC connection, publish. The app
+checks the prerequisites first, grants its own service principal the access
+the BDC SDK needs, and runs the SDK steps for you. A Dashboard shows what is
+in BDC, how publishing goes, and (optionally) how much SAP reads.
 
 ---
 
@@ -82,8 +83,8 @@ deploy.
 |---|---|
 | Unity Catalog + Delta Sharing enabled in the workspace | shares and recipients live here |
 | At least one serverless SQL warehouse | used for `SHOW`/`DESCRIBE` queries and for the activity-log writes |
-| An SAP BDC Connect recipient with `authentication_type = OIDC_FEDERATION` (typically named `bdc-connect-*`) | the BDC publish target. **`TOKEN`-type recipients require additional workspace setup — see the FAQ entry "Publish fails with 'Secret does not exist with scope: sap-bdc-connect-sdk'"** |
-| Workspace user with `ALTER` (or ownership) on the share you want to publish | UC enforces this when the app issues `GRANT SELECT ON SHARE` |
+| An SAP BDC Connect recipient with `authentication_type = OIDC_FEDERATION` (typically named `bdc-connect-*`) | the BDC publish target. **`TOKEN`-type recipients need a workspace secret scope. Pre-flight checks it; see the FAQ entry on `sap-bdc-connect-sdk`.** |
+| A user who owns the share and has `USE RECIPIENT`, or has `USE RECIPIENT` + `USE SHARE` + `SET SHARE PERMISSION` | UC enforces this when the app issues `GRANT SELECT ON SHARE` |
 
 The app **does not** require workspace-admin rights for either the user or
 the service principal. UC privileges on the share + `CAN_USE` on a
@@ -93,17 +94,25 @@ warehouse are sufficient.
 
 ## How it works
 
-The app uses **two identities** simultaneously — a hybrid auth model:
+The app uses **two identities**:
 
 | Identity | Used for |
 |---|---|
-| **End user** (via OBO token, scope `sql`) | Listing SQL warehouses (the picker reflects warehouses *you* have `CAN_USE` on), all UC reads (`SHOW SHARES`, `SHOW RECIPIENTS`, `DESCRIBE …`, `SHOW GRANTS …`), and the privilege mutations on the share itself: `GRANT SELECT ON SHARE` (publish) and `REVOKE SELECT ON SHARE` (delete). UC enforces ownership / `ALTER` on the share against the user's identity. |
-| **App service principal** | Starting and polling SQL warehouses on your behalf, submitting the BDC publish/delete Jobs, polling job status. The Job itself runs as the SP, **no `run_as`, no workspace-admin requirement**. The Job only calls the BDC SDK, which doesn't depend on user identity. |
+| **End user** (via OBO token, scope `sql`) | Listing SQL warehouses, all UC reads (one `system.information_schema` query lists every share with its BDC grants; `SHOW ALL IN SHARE` and one `information_schema.columns` query cover a share's tables and keys), the SP grants on source tables during pre-flight, and the privilege changes on the share: `GRANT SELECT ON SHARE` (publish) and `REVOKE SELECT ON SHARE` (unpublish). |
+| **App service principal** | Starting warehouses, submitting and polling the BDC publish/unpublish jobs, pre-flight probes (can the SP read the source tables, is the SDK secret scope readable), activity log writes, the run reconciler, and the optional audit-log read for SAP usage. The job runs as the SP, **no `run_as`, no workspace-admin requirement**. |
 
-Audit trail stays coherent: `system.access.audit` shows GRANT/REVOKE
-attributed to the user; the BDC SDK calls are attributed to the SP. The
-app's own activity log (configured via the in-app wizard) merges both
-views.
+`system.access.audit` shows GRANT/REVOKE under the user and the SDK calls
+under the SP. The app's activity log (set up in the app) ties both together.
+
+Reliability:
+
+- Every API request answers within 25 seconds. Slow work (a cold warehouse,
+  a large metastore) continues in the background and the page waits for it,
+  so the Apps proxy never returns a bare `HTTP 502` for a slow query.
+- Job outcomes are recorded server-side. A reconciler checks unfinished runs
+  every minute, so closing the tab no longer loses the result. A finished
+  unpublish whose REVOKE didn't run yet is "revoke pending" and completes
+  on the user's next visit.
 
 ```
 ┌────────────────┐       ┌─────────────────────┐       ┌──────────────────┐
@@ -115,8 +124,8 @@ views.
                          │  - /api/grants      │       │  - Apps (self)   │
                          │  - /api/publish     │       │  - Workspace I/O │
                          │  - /api/unpublish   │       └────────┬─────────┘
-                         │  - /api/activity    │                │
-                         │  - /api/setup       │                ▼
+                         │  - /api/dashboard   │                │
+                         │  - /api/activity    │                ▼
                          └─────────────────────┘      ┌────────────────────┐
                                                       │ Serverless Jobs    │
                                                       │ run as the SP      │
@@ -127,11 +136,60 @@ views.
 
 ---
 
+## Dashboard
+
+One page, three tiers. A tier that isn't set up shows the exact step to
+enable it instead of an error.
+
+| Tier | Needs | Shows |
+|---|---|---|
+| Inventory | nothing extra (your own UC access) | shares in BDC, BDC connections in use, tables, tables without a UC primary key, source tables changed after the last publish |
+| Publishing | the activity log | publish success rate, activity per day, failures by reason (linked to the FAQ), last publish per share, top publishers (admins) |
+| SAP reads | optional grant to the app SP (below) | queries, rows and bytes read per BDC connection and table, last read |
+
+A "Needs attention" list collects: source changed after publish (Update in
+BDC), revoke pending (Finish), last publish failed, and published but not
+read by SAP for the selected window.
+
+To enable SAP reads, a metastore admin runs:
+
+```sql
+GRANT USE CATALOG ON CATALOG system TO `<app-sp-client-id>`;
+GRANT USE SCHEMA ON SCHEMA system.access TO `<app-sp-client-id>`;
+GRANT SELECT ON TABLE system.access.audit TO `<app-sp-client-id>`;
+```
+
+The SP can then read the whole audit table. The app only queries Delta
+Sharing query events for BDC connections the viewer can see. If that
+trade-off doesn't fit, skip the grant or set `BDC_USAGE_FROM_AUDIT=false`.
+
+---
+
+## Configuration
+
+All optional, set in `app.yaml`.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `BDC_ACTIVITY_TABLE` | empty | Pin the activity log table (3-part name). Empty means the in-app wizard sets it. |
+| `BDC_ACTIVITY_ADMIN_GROUP` | `admins` | Members see all users' events on the Activity page and Dashboard. |
+| `BDC_RECIPIENT_PATTERN` | `bdc.*connect\|connect.*bdc` | Regex that marks a recipient as a BDC connection. |
+| `BDC_ALLOW_VIEWS` | `false` | Allow views in published shares once BDC Connect support is confirmed for your landscape. |
+| `BDC_USAGE_FROM_AUDIT` | `true` | Set to `false` to hide the SAP reads tier. |
+| `BDC_REQUEST_BUDGET_MS` | `25000` | Time a request may take before the app answers "still working". Keep it below the Apps proxy timeout. |
+
+Troubleshooting: `/api/health?deep=true&warehouseId=<id>` checks the SP
+token, the warehouse and the activity log; `/api/diag` shows the SQL the app
+runs and compares `information_schema` with `SHOW GRANTS` on a sample of
+shares.
+
+---
+
 ## Repo layout
 
 ```
 .
-├── apps/bdc-sharing/        # Databricks App source — everything that ships to Marketplace
+├── apps/bdc-sharing/        # Databricks App source: everything that ships to Marketplace
 │   ├── README.md            # In-app docs, served at /README.md (identical to this file)
 │   ├── app.yaml             # Apps runtime config (command, env, scopes)
 │   ├── manifest.yaml        # Databricks Marketplace listing manifest
@@ -139,8 +197,8 @@ views.
 │   ├── notebooks/
 │   │   ├── bdc_publish.py   # Submitted by the publish route at runtime
 │   │   └── bdc_unpublish.py # Submitted by the delete route at runtime
-│   ├── public/              # Static UI (index.html, activity.html, docs.html, faq.html)
-│   └── server/              # Express backend (routes/, dbx.js, auth.js, notebooks.js, …)
+│   ├── public/              # Static UI: index.html (Publish), dashboard.html, activity.html, faq.html, docs.html, common.js, app.css
+│   └── server/              # Express backend: routes/, lib/ (request budget, pre-flight, SP grants), runs.js (reconciler), activity.js, dbx.js, …
 ├── notebooks/
 │   └── deploy_app.py        # DAB-only deploy job: binds app source + grants SP read (Option B)
 ├── databricks.yml           # Asset Bundle definition (Option B install path)

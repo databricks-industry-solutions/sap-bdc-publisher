@@ -3,7 +3,7 @@
 # MAGIC # BDC Unpublish Notebook
 # MAGIC
 # MAGIC Reverses what `bdc_publish.py` does. Parameterized notebook invoked by
-# MAGIC the Data Sharing app when a user toggles to **Delete** mode.
+# MAGIC the Data Sharing app when a user clicks **Unpublish** on a share.
 # MAGIC
 # MAGIC Single step: `delete_share` on the BDC side. The SDK call removes the
 # MAGIC BDC catalog entry, revokes BDC-side recipient access, and deletes the
@@ -13,7 +13,9 @@
 # MAGIC The `REVOKE SELECT ON SHARE` on the Databricks side is executed by
 # MAGIC the app server *after* this Job lands SUCCESS, via the
 # MAGIC `/api/unpublish/:runId/finalize` endpoint, using the user's OBO
-# MAGIC identity. Deferring the REVOKE to after-success ensures consumers
+# MAGIC identity. If the browser is gone by then, the app marks the delete as
+# MAGIC "revoke pending" and runs the REVOKE on that user's next visit.
+# MAGIC Deferring the REVOKE to after-success ensures consumers
 # MAGIC don't lose SELECT mid-read if the BDC teardown fails. This notebook
 # MAGIC therefore runs as the app SP and does not need workspace-admin
 # MAGIC privileges or `run_as`.
