@@ -233,6 +233,14 @@ databricks secrets put-acl sap-bdc-connect-sdk &lt;app-sp-client-id&gt; READ</co
         </div>
       </details>
 
+      <details id="aibi">
+        <summary>Is there an AI/BI dashboard?</summary>
+        <div>
+          <p>Yes. The app's Dashboard page has <strong>Download AI/BI dashboard</strong>. In Databricks, import the file on the Dashboards page with <em>Import dashboard from file</em>. The file already points at your activity table. Bundle installs get it deployed automatically.</p>
+          <p>It runs with each viewer's own permissions: the Publishing page needs <code>SELECT</code> on the activity table, the SAP reads page needs <code>SELECT</code> on <code>system.access.audit</code>.</p>
+        </div>
+      </details>
+
       <details id="usage">
         <summary>How do I turn on SAP read KPIs, and what is the trade-off?</summary>
         <div>

@@ -12,6 +12,9 @@
 // with the exact grant, never an error.
 
 import { Router } from 'express';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getShareSourceSummary, spSqlQuery, sqlQuery, getUserGroupsByEmail } from '../dbx.js';
 import { loadOverview } from './shares.js';
 import { budgeted } from '../lib/budget.js';
@@ -327,6 +330,28 @@ async function buildDashboard(req, { warehouseId, days, all }) {
     pendingRevokes,
   };
 }
+
+// GET /api/dashboard/aibi-file
+// The AI/BI dashboard shipped in dashboards/, with the configured activity
+// table written into its queries, for "Import dashboard from file". The
+// bundle install deploys the same file directly.
+const AIBI_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'dashboards', 'bdc_sharing.lvdash.json');
+router.get('/aibi-file', async (req, res, next) => {
+  try {
+    requireRequestUser(req);
+    const table = await getActivityTable();
+    if (!table) {
+      const e = new Error('Set up the activity log first (Activity page). The AI/BI dashboard reads from it.');
+      e.status = 400; e.code = 'activity_not_configured'; throw e;
+    }
+    const raw = await fs.readFile(AIBI_FILE, 'utf8');
+    const fq = table.split('.').map((p) => '`' + p.replace(/`/g, '``') + '`').join('.');
+    const out = raw.replace(/\bFROM activity\b/g, `FROM ${fq}`);
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="sap_bdc_sharing.lvdash.json"');
+    res.send(out);
+  } catch (err) { next(err); }
+});
 
 router.get('/', async (req, res, next) => {
   try {

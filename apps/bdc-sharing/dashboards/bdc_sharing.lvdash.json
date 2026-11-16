@@ -1,0 +1,1346 @@
+{
+  "datasets": [
+    {
+      "name": "ds_events",
+      "displayName": "Activity events",
+      "queryLines": [
+        "SELECT\n",
+        "  event_time,\n",
+        "  event_type,\n",
+        "  CASE\n",
+        "    WHEN event_type IN ('publish_job_succeeded', 'republish_job_succeeded') THEN 'Published'\n",
+        "    WHEN event_type IN ('publish_job_failed', 'republish_job_failed', 'publish_grant_failed', 'publish_preflight_failed') THEN 'Failed'\n",
+        "    WHEN event_type = 'delete_finalized' THEN 'Unpublished'\n",
+        "    ELSE 'Other'\n",
+        "  END AS outcome,\n",
+        "  CASE\n",
+        "    WHEN event_type = 'publish_preflight_failed' THEN 'Stopped by pre-flight'\n",
+        "    WHEN event_type = 'publish_grant_failed' THEN 'GRANT on share failed'\n",
+        "    WHEN error_code = 'secret_scope_missing' THEN 'Secret scope missing'\n",
+        "    WHEN error_code = 'missing_sp_grant' THEN 'App SP missing table access'\n",
+        "    WHEN error_code = 'privilege_denied' THEN 'Privilege denied'\n",
+        "    WHEN error_code = 'pk_missing' THEN 'Primary key missing'\n",
+        "    WHEN error_code = 'object_not_found' THEN 'Object not found'\n",
+        "    ELSE 'Other'\n",
+        "  END AS failure_reason,\n",
+        "  user_email,\n",
+        "  share_name,\n",
+        "  recipient_name AS bdc_connection,\n",
+        "  run_id,\n",
+        "  error_message,\n",
+        "  CASE WHEN event_type IN ('publish_job_succeeded', 'republish_job_succeeded', 'publish_job_failed', 'republish_job_failed', 'publish_grant_failed') THEN 1 ELSE 0 END AS is_publish_attempt,\n",
+        "  CASE WHEN event_type IN ('publish_job_succeeded', 'republish_job_succeeded') THEN 1 ELSE 0 END AS is_publish_ok\n",
+        "FROM activity\n",
+        "WHERE event_type <> 'wizard_adopt_probe'\n"
+      ],
+      "columns": [
+        {
+          "displayName": "Publish success rate",
+          "description": "Successful publishes / publish attempts",
+          "expression": "SUM(`is_publish_ok`) / NULLIF(SUM(`is_publish_attempt`), 0)"
+        }
+      ]
+    },
+    {
+      "name": "ds_published",
+      "displayName": "Shares in BDC",
+      "queryLines": [
+        "WITH grants AS (\n",
+        "  SELECT share_name, recipient_name\n",
+        "  FROM system.information_schema.share_recipient_privileges\n",
+        "  WHERE privilege_type = 'SELECT' AND recipient_name RLIKE '(?i)bdc.*connect|connect.*bdc'\n",
+        "),\n",
+        "sources AS (\n",
+        "  SELECT u.share_name, COUNT(*) AS table_count, MAX(t.last_altered) AS source_last_altered\n",
+        "  FROM system.information_schema.table_share_usage u\n",
+        "  LEFT JOIN system.information_schema.tables t\n",
+        "    ON t.table_catalog = u.catalog_name AND t.table_schema = u.schema_name AND t.table_name = u.table_name\n",
+        "  GROUP BY u.share_name\n",
+        "),\n",
+        "last_pub AS (\n",
+        "  SELECT share_name, recipient_name, MAX(event_time) AS last_published, MAX_BY(user_email, event_time) AS last_published_by\n",
+        "  FROM activity\n",
+        "  WHERE event_type IN ('publish_job_succeeded', 'republish_job_succeeded')\n",
+        "  GROUP BY share_name, recipient_name\n",
+        ")\n",
+        "SELECT\n",
+        "  g.share_name,\n",
+        "  g.recipient_name AS bdc_connection,\n",
+        "  s.share_owner,\n",
+        "  COALESCE(src.table_count, 0) AS table_count,\n",
+        "  CASE WHEN ROW_NUMBER() OVER (PARTITION BY g.share_name ORDER BY g.recipient_name) = 1 THEN COALESCE(src.table_count, 0) ELSE 0 END AS table_count_once,\n",
+        "  src.source_last_altered,\n",
+        "  lp.last_published,\n",
+        "  lp.last_published_by,\n",
+        "  CASE\n",
+        "    WHEN lp.last_published IS NULL THEN 'Not published by the app'\n",
+        "    WHEN src.source_last_altered > lp.last_published THEN 'Source changed after publish'\n",
+        "    ELSE 'Up to date'\n",
+        "  END AS schema_status\n",
+        "FROM grants g\n",
+        "JOIN system.information_schema.shares s ON s.share_name = g.share_name\n",
+        "LEFT JOIN sources src ON src.share_name = g.share_name\n",
+        "LEFT JOIN last_pub lp ON lp.share_name = g.share_name AND lp.recipient_name = g.recipient_name\n",
+        "ORDER BY g.share_name, g.recipient_name\n"
+      ]
+    },
+    {
+      "name": "ds_reads",
+      "displayName": "SAP reads (audit log)",
+      "queryLines": [
+        "SELECT\n",
+        "  a.event_date,\n",
+        "  r.recipient_name AS bdc_connection,\n",
+        "  get_json_object(a.response.result, '$.tableName') AS table_name,\n",
+        "  COUNT(*) AS queries,\n",
+        "  SUM(CAST(get_json_object(a.response.result, '$.numRecords') AS BIGINT)) AS rows_read,\n",
+        "  SUM(CAST(get_json_object(a.response.result, '$.scannedAddFileSize') AS BIGINT)) AS bytes_scanned\n",
+        "FROM system.access.audit a\n",
+        "JOIN system.information_schema.recipients r\n",
+        "  ON r.recipient_id = get_json_object(a.response.result, '$.deltaSharingRecipientId')\n",
+        "WHERE a.service_name = 'unityCatalog'\n",
+        "  AND a.action_name IN ('deltaSharingQueriedTable', 'deltaSharingQueriedTableChanges')\n",
+        "  AND a.event_date >= date_sub(current_date(), 180)\n",
+        "  AND r.recipient_name RLIKE '(?i)bdc.*connect|connect.*bdc'\n",
+        "GROUP BY a.event_date, r.recipient_name, get_json_object(a.response.result, '$.tableName')\n"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "publishing",
+      "displayName": "Publishing",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## SAP BDC sharing\n",
+                "\n",
+                "What is shared to SAP Business Data Cloud, and how publishing goes. Data from Unity Catalog and the app's activity log."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi-shares",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_published",
+                  "fields": [
+                    {
+                      "name": "countdistinct(share_name)",
+                      "expression": "COUNT(DISTINCT `share_name`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "countdistinct(share_name)",
+                  "displayName": "Shares in BDC"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Shares in BDC",
+                "description": "Shares a BDC connection can read",
+                "showDescription": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi-tables",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_published",
+                  "fields": [
+                    {
+                      "name": "sum(table_count_once)",
+                      "expression": "SUM(`table_count_once`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(table_count_once)",
+                  "displayName": "Tables in BDC",
+                  "format": {
+                    "type": "number",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Tables in BDC",
+                "description": "Tables across those shares",
+                "showDescription": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi-success",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_events",
+                  "fields": [
+                    {
+                      "name": "measure(Publish success rate)",
+                      "expression": "MEASURE(`Publish success rate`)"
+                    },
+                    {
+                      "name": "daily(event_time)",
+                      "expression": "DATE_TRUNC(\"DAY\", `event_time`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Publish success rate)",
+                  "displayName": "Publish success rate",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 0
+                    }
+                  }
+                },
+                "period": {
+                  "fieldName": "daily(event_time)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Publish success rate",
+                "description": "Successful / attempted publishes",
+                "showDescription": true
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi-publishes",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_events",
+                  "fields": [
+                    {
+                      "name": "sum(is_publish_ok)",
+                      "expression": "SUM(`is_publish_ok`)"
+                    },
+                    {
+                      "name": "daily(event_time)",
+                      "expression": "DATE_TRUNC(\"DAY\", `event_time`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(is_publish_ok)",
+                  "displayName": "Successful publishes",
+                  "format": {
+                    "type": "number",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                },
+                "period": {
+                  "fieldName": "daily(event_time)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Successful publishes",
+                "description": "In the selected date range",
+                "showDescription": true
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "chart-activity",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_events",
+                  "fields": [
+                    {
+                      "name": "daily(event_time)",
+                      "expression": "DATE_TRUNC(\"DAY\", `event_time`)"
+                    },
+                    {
+                      "name": "outcome",
+                      "expression": "`outcome`"
+                    },
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`event_type`)"
+                    }
+                  ],
+                  "disaggregated": false,
+                  "filters": [
+                    {
+                      "expression": "`outcome` <> 'Other'"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "daily(event_time)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Day"
+                },
+                "y": {
+                  "fieldName": "count(*)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Events"
+                },
+                "color": {
+                  "fieldName": "outcome",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Published",
+                        "color": "#2563EB"
+                      },
+                      {
+                        "value": "Failed",
+                        "color": "#D97706"
+                      },
+                      {
+                        "value": "Unpublished",
+                        "color": "#9333EA"
+                      }
+                    ]
+                  },
+                  "displayName": "Outcome"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Activity per day",
+                "description": "Published, failed and unpublished",
+                "showDescription": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 8,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "chart-failures",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_events",
+                  "fields": [
+                    {
+                      "name": "failure_reason",
+                      "expression": "`failure_reason`"
+                    },
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`event_type`)"
+                    }
+                  ],
+                  "disaggregated": false,
+                  "filters": [
+                    {
+                      "expression": "`outcome` = 'Failed'"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "count(*)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Failures"
+                },
+                "y": {
+                  "fieldName": "failure_reason",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "value"
+                    }
+                  },
+                  "displayName": "Reason"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Failures by reason"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 5,
+            "width": 4,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "table-published",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_published",
+                  "fields": [
+                    {
+                      "name": "share_name",
+                      "expression": "`share_name`"
+                    },
+                    {
+                      "name": "bdc_connection",
+                      "expression": "`bdc_connection`"
+                    },
+                    {
+                      "name": "share_owner",
+                      "expression": "`share_owner`"
+                    },
+                    {
+                      "name": "table_count",
+                      "expression": "`table_count`"
+                    },
+                    {
+                      "name": "last_published",
+                      "expression": "`last_published`"
+                    },
+                    {
+                      "name": "last_published_by",
+                      "expression": "`last_published_by`"
+                    },
+                    {
+                      "name": "source_last_altered",
+                      "expression": "`source_last_altered`"
+                    },
+                    {
+                      "name": "schema_status",
+                      "expression": "`schema_status`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "share_name",
+                    "displayName": "Share"
+                  },
+                  {
+                    "fieldName": "bdc_connection",
+                    "displayName": "BDC connection"
+                  },
+                  {
+                    "fieldName": "share_owner",
+                    "displayName": "Owner"
+                  },
+                  {
+                    "fieldName": "table_count",
+                    "displayName": "Tables"
+                  },
+                  {
+                    "fieldName": "last_published",
+                    "displayName": "Last published"
+                  },
+                  {
+                    "fieldName": "last_published_by",
+                    "displayName": "By"
+                  },
+                  {
+                    "fieldName": "source_last_altered",
+                    "displayName": "Source changed"
+                  },
+                  {
+                    "fieldName": "schema_status",
+                    "displayName": "Status"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Shares in BDC",
+                "description": "One row per share and BDC connection. 'Source changed after publish' means the schema in BDC may be out of date: use Update in BDC in the app.",
+                "showDescription": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "chart-publishers",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_events",
+                  "fields": [
+                    {
+                      "name": "user_email",
+                      "expression": "`user_email`"
+                    },
+                    {
+                      "name": "sum(is_publish_ok)",
+                      "expression": "SUM(`is_publish_ok`)"
+                    }
+                  ],
+                  "disaggregated": false,
+                  "filters": [
+                    {
+                      "expression": "`is_publish_ok` = 1"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "sum(is_publish_ok)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Successful publishes"
+                },
+                "y": {
+                  "fieldName": "user_email",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "value"
+                    }
+                  },
+                  "displayName": "User"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Top publishers"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 17,
+            "width": 5,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "table-failures",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_events",
+                  "fields": [
+                    {
+                      "name": "event_time",
+                      "expression": "`event_time`"
+                    },
+                    {
+                      "name": "share_name",
+                      "expression": "`share_name`"
+                    },
+                    {
+                      "name": "bdc_connection",
+                      "expression": "`bdc_connection`"
+                    },
+                    {
+                      "name": "user_email",
+                      "expression": "`user_email`"
+                    },
+                    {
+                      "name": "failure_reason",
+                      "expression": "`failure_reason`"
+                    },
+                    {
+                      "name": "error_message",
+                      "expression": "`error_message`"
+                    },
+                    {
+                      "name": "run_id",
+                      "expression": "`run_id`"
+                    }
+                  ],
+                  "disaggregated": true,
+                  "filters": [
+                    {
+                      "expression": "`outcome` = 'Failed'"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "event_time",
+                    "displayName": "Time"
+                  },
+                  {
+                    "fieldName": "share_name",
+                    "displayName": "Share"
+                  },
+                  {
+                    "fieldName": "bdc_connection",
+                    "displayName": "BDC connection"
+                  },
+                  {
+                    "fieldName": "user_email",
+                    "displayName": "User"
+                  },
+                  {
+                    "fieldName": "failure_reason",
+                    "displayName": "Reason"
+                  },
+                  {
+                    "fieldName": "error_message",
+                    "displayName": "Error"
+                  },
+                  {
+                    "fieldName": "run_id",
+                    "displayName": "Run"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Recent failures"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 17,
+            "width": 7,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "sap_reads",
+      "displayName": "SAP reads",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "reads-title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## SAP reads\n",
+                "\n",
+                "Delta Sharing queries by BDC connections, from system.access.audit. Needs SELECT on system.access.audit for whoever runs this dashboard."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi-queries",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_reads",
+                  "fields": [
+                    {
+                      "name": "sum(queries)",
+                      "expression": "SUM(`queries`)"
+                    },
+                    {
+                      "name": "daily(event_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `event_date`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(queries)",
+                  "displayName": "Queries",
+                  "format": {
+                    "type": "number",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                },
+                "period": {
+                  "fieldName": "daily(event_date)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Queries"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi-rows",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_reads",
+                  "fields": [
+                    {
+                      "name": "sum(rows_read)",
+                      "expression": "SUM(`rows_read`)"
+                    },
+                    {
+                      "name": "daily(event_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `event_date`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(rows_read)",
+                  "displayName": "Rows read",
+                  "format": {
+                    "type": "number",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                },
+                "period": {
+                  "fieldName": "daily(event_date)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Rows read"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi-bytes",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_reads",
+                  "fields": [
+                    {
+                      "name": "sum(bytes_scanned)",
+                      "expression": "SUM(`bytes_scanned`)"
+                    },
+                    {
+                      "name": "daily(event_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `event_date`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(bytes_scanned)",
+                  "displayName": "Data scanned (bytes)",
+                  "format": {
+                    "type": "number",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                },
+                "period": {
+                  "fieldName": "daily(event_date)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Data scanned (bytes)"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 2,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "chart-reads",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_reads",
+                  "fields": [
+                    {
+                      "name": "daily(event_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `event_date`)"
+                    },
+                    {
+                      "name": "bdc_connection",
+                      "expression": "`bdc_connection`"
+                    },
+                    {
+                      "name": "sum(queries)",
+                      "expression": "SUM(`queries`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "daily(event_date)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Day"
+                },
+                "y": {
+                  "fieldName": "sum(queries)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Queries"
+                },
+                "color": {
+                  "fieldName": "bdc_connection",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "BDC connection"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Queries per day"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "table-reads",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_reads",
+                  "fields": [
+                    {
+                      "name": "bdc_connection",
+                      "expression": "`bdc_connection`"
+                    },
+                    {
+                      "name": "table_name",
+                      "expression": "`table_name`"
+                    },
+                    {
+                      "name": "sum(queries)",
+                      "expression": "SUM(`queries`)"
+                    },
+                    {
+                      "name": "sum(rows_read)",
+                      "expression": "SUM(`rows_read`)"
+                    },
+                    {
+                      "name": "sum(bytes_scanned)",
+                      "expression": "SUM(`bytes_scanned`)"
+                    },
+                    {
+                      "name": "max(event_date)",
+                      "expression": "MAX(`event_date`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "bdc_connection",
+                    "displayName": "BDC connection"
+                  },
+                  {
+                    "fieldName": "table_name",
+                    "displayName": "Table"
+                  },
+                  {
+                    "fieldName": "sum(queries)",
+                    "displayName": "Queries"
+                  },
+                  {
+                    "fieldName": "sum(rows_read)",
+                    "displayName": "Rows"
+                  },
+                  {
+                    "fieldName": "sum(bytes_scanned)",
+                    "displayName": "Bytes scanned",
+                    "format": {
+                      "type": "number",
+                      "abbreviation": "compact",
+                      "decimalPlaces": {
+                        "type": "max",
+                        "places": 1
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "max(event_date)",
+                    "displayName": "Last read"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Reads by table"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 12,
+            "height": 7
+          }
+        }
+      ]
+    },
+    {
+      "name": "filters",
+      "displayName": "Filters",
+      "pageType": "PAGE_TYPE_GLOBAL_FILTERS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "filter-date",
+            "queries": [
+              {
+                "name": "q_events_date",
+                "query": {
+                  "datasetName": "ds_events",
+                  "fields": [
+                    {
+                      "name": "event_time",
+                      "expression": "`event_time`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_reads_date",
+                "query": {
+                  "datasetName": "ds_reads",
+                  "fields": [
+                    {
+                      "name": "event_date",
+                      "expression": "`event_date`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "event_time",
+                    "queryName": "q_events_date"
+                  },
+                  {
+                    "fieldName": "event_date",
+                    "queryName": "q_reads_date"
+                  }
+                ]
+              },
+              "selection": {
+                "defaultSelection": {
+                  "range": {
+                    "dataType": "DATE",
+                    "min": {
+                      "value": "now-30d/d"
+                    },
+                    "max": {
+                      "value": "now/d"
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Date range"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter-share",
+            "queries": [
+              {
+                "name": "q_events_share",
+                "query": {
+                  "datasetName": "ds_events",
+                  "fields": [
+                    {
+                      "name": "share_name",
+                      "expression": "`share_name`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_pub_share",
+                "query": {
+                  "datasetName": "ds_published",
+                  "fields": [
+                    {
+                      "name": "share_name",
+                      "expression": "`share_name`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "share_name",
+                    "displayName": "Share",
+                    "queryName": "q_events_share"
+                  },
+                  {
+                    "fieldName": "share_name",
+                    "displayName": "Share",
+                    "queryName": "q_pub_share"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Share"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter-connection",
+            "queries": [
+              {
+                "name": "q_events_conn",
+                "query": {
+                  "datasetName": "ds_events",
+                  "fields": [
+                    {
+                      "name": "bdc_connection",
+                      "expression": "`bdc_connection`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_pub_conn",
+                "query": {
+                  "datasetName": "ds_published",
+                  "fields": [
+                    {
+                      "name": "bdc_connection",
+                      "expression": "`bdc_connection`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "q_reads_conn",
+                "query": {
+                  "datasetName": "ds_reads",
+                  "fields": [
+                    {
+                      "name": "bdc_connection",
+                      "expression": "`bdc_connection`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "bdc_connection",
+                    "displayName": "BDC connection",
+                    "queryName": "q_events_conn"
+                  },
+                  {
+                    "fieldName": "bdc_connection",
+                    "displayName": "BDC connection",
+                    "queryName": "q_pub_conn"
+                  },
+                  {
+                    "fieldName": "bdc_connection",
+                    "displayName": "BDC connection",
+                    "queryName": "q_reads_conn"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "BDC connection"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        }
+      ]
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "canvasBackgroundColor": {
+        "light": "#F4F6FA",
+        "dark": "#1F272D"
+      },
+      "widgetBackgroundColor": {
+        "light": "#FFFFFF",
+        "dark": "#11171C"
+      },
+      "widgetBorderColor": {
+        "light": "#FFFFFF",
+        "dark": "#11171C"
+      },
+      "fontColor": {
+        "light": "#0F172A",
+        "dark": "#E8ECF0"
+      },
+      "selectionColor": {
+        "light": "#2272B4",
+        "dark": "#8ACAFF"
+      },
+      "visualizationColors": [
+        "#2563EB",
+        "#D97706",
+        "#9333EA",
+        "#0D9488",
+        "#DB2777",
+        "#64748B"
+      ],
+      "widgetHeaderAlignment": "LEFT"
+    }
+  }
+}

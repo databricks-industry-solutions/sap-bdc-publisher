@@ -48,8 +48,13 @@ deploy.
 3. **Click "Deploy"** in the Asset Bundle Editor. This uploads the app
    source under `./apps/bdc-sharing/` to a bundle-managed workspace
    path, registers the `bdc-sharing` Databricks App resource (with the
-   `sql` user-API scope already set), and stages the
-   `bdc_publish` / `bdc_unpublish` notebooks the app calls at runtime.
+   `sql` user-API scope already set), stages the
+   `bdc_publish` / `bdc_unpublish` notebooks the app calls at runtime,
+   and creates the **SAP BDC sharing** AI/BI dashboard. The dashboard
+   uses the warehouse named "Serverless Starter Warehouse" and expects
+   the activity table at `main.bdc_sharing.activity`; override with
+   `--var warehouse_id=<id> --var activity_catalog=<catalog> --var activity_schema=<schema>`
+   when deploying from the CLI.
    The app itself comes up **UNAVAILABLE** at this point: bundle
    deploy does not bind source to the app on its own.
 
@@ -147,6 +152,14 @@ enable it instead of an error.
 | Publishing | the activity log | publish success rate, activity per day, failures by reason (linked to the FAQ), last publish per share, top publishers (admins) |
 | SAP reads | optional grant to the app SP (below) | queries, rows and bytes read per BDC connection and table, last read |
 
+The same data is available as an **AI/BI dashboard**
+(`apps/bdc-sharing/dashboards/bdc_sharing.lvdash.json`) for slicing,
+schedules and sharing: two pages (Publishing, SAP reads) with date, share
+and BDC connection filters. The bundle deploys it; Marketplace installs
+download it from the app's Dashboard page (the file comes with your
+activity table filled in) and use *Import dashboard from file*. It runs
+with each viewer's permissions.
+
 A "Needs attention" list collects: source changed after publish (Update in
 BDC), revoke pending (Finish), last publish failed, and published but not
 read by SAP for the selected window.
@@ -192,6 +205,7 @@ shares.
 ├── apps/bdc-sharing/        # Databricks App source: everything that ships to Marketplace
 │   ├── README.md            # In-app docs, served at /README.md (identical to this file)
 │   ├── app.yaml             # Apps runtime config (command, env, scopes)
+│   ├── dashboards/          # AI/BI dashboard (deployed by the bundle, downloadable in the app)
 │   ├── manifest.yaml        # Databricks Marketplace listing manifest
 │   ├── package.json         # Express + npm
 │   ├── notebooks/
@@ -201,7 +215,7 @@ shares.
 │   └── server/              # Express backend: routes/, lib/ (request budget, pre-flight, SP grants), runs.js (reconciler), activity.js, dbx.js, …
 ├── notebooks/
 │   └── deploy_app.py        # DAB-only deploy job: binds app source + grants SP read (Option B)
-├── databricks.yml           # Asset Bundle definition (Option B install path)
+├── databricks.yml           # Asset Bundle definition (Option B install path): app, deploy job, AI/BI dashboard
 ├── requirements.txt         # Python deps for the runtime notebooks
 └── env.example              # App env vars (mirrored from app.yaml for local reference)
 ```
