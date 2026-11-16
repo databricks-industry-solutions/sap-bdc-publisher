@@ -6,16 +6,25 @@ import {
   listSharesRaw,
   listRecipientsRaw,
   showGrantsOnShare,
-  sqlQuery,
+  listSharesWithGrants,
 } from '../dbx.js';
+import { isBdcRecipient, bdcRecipientPattern } from '../bdc.js';
+import { mapLimit } from '../lib/budget.js';
 
 const router = Router();
-const BDC_RE = /^bdc-connect-/i;
+const PARITY_SAMPLE = 10;
 
 // Exact SQL statements the app runs. Surfaced so you can verify behaviour
 // without reading the source.
 const QUERIES = {
-  listShares: 'SHOW SHARES',
+  listSharesV2:
+    'SELECT s.share_name, s.share_owner, p.recipient_name, p.privilege_type, r.authentication_type, t.table_count ' +
+    'FROM system.information_schema.shares s ' +
+    'LEFT JOIN system.information_schema.share_recipient_privileges p ON p.share_name = s.share_name ' +
+    'LEFT JOIN system.information_schema.recipients r ON r.recipient_name = p.recipient_name ' +
+    'LEFT JOIN (SELECT share_name, COUNT(*) table_count FROM system.information_schema.table_share_usage GROUP BY share_name) t ' +
+    'ON t.share_name = s.share_name',
+  listShares: 'SHOW SHARES (fallback only)',
   listRecipients: 'SHOW RECIPIENTS',
   describeShare: 'DESCRIBE SHARE `<share_name>`',
   showAllInShare: 'SHOW ALL IN SHARE `<share_name>`',
@@ -35,9 +44,8 @@ const QUERIES = {
     "AND tc.table_name = '<table>' " +
     "ORDER BY kcu.ordinal_position",
   publishedCheck:
-    "SHOW GRANTS ON SHARE `<share_name>` — and the app treats a share as " +
-    "`publishedToBdc` iff a row has principal matching /^bdc-connect-/i AND " +
-    "action_type = 'SELECT'.",
+    'A share is in BDC if a recipient whose name matches the BDC pattern ' +
+    'holds SELECT on it (from share_recipient_privileges).',
 };
 
 router.get('/', async (req, res) => {
@@ -86,44 +94,56 @@ router.get('/', async (req, res) => {
   }
 
   if (warehouseId) {
+    // v2 listing query, plus a parity check against SHOW GRANTS ON SHARE on
+    // a sample of shares. This answers whether information_schema shows the
+    // same BDC grants as the SHOW command (PRD open question Q3).
+    let v2Rows = null;
+    try {
+      v2Rows = await listSharesWithGrants(req, warehouseId);
+      out.checks.push({
+        check: 'information_schema share listing (user OBO)',
+        sqlRun: QUERIES.listSharesV2,
+        ok: true, count: v2Rows.length, sample: v2Rows.slice(0, 5),
+        rule: `BDC recipient pattern: /${bdcRecipientPattern()}/i`,
+      });
+    } catch (e) {
+      out.checks.push({ check: 'information_schema share listing', sqlRun: QUERIES.listSharesV2, ok: false, status: e.status, message: e.message, details: e.details });
+    }
     try {
       const shares = await listSharesRaw(req, warehouseId);
-      out.checks.push({
-        check: 'SHOW SHARES (user OBO)',
-        sqlRun: QUERIES.listShares,
-        ok: true, count: shares.length,
-        sample: shares.slice(0, 3),
-      });
-
-      // Run SHOW GRANTS on every share so the panel shows the full picture.
-      for (const s of shares) {
-        const sqlRun = `SHOW GRANTS ON SHARE \`${s.name}\``;
-        try {
-          const grants = await showGrantsOnShare(req, warehouseId, s.name);
-          const normalized = grants.map((g) => ({
-            principal: g.recipient || g.Recipient || g.principal || g.Principal,
-            action: g.privilege || g.action_type || g.ActionType,
-            raw: g,
-          }));
-          const bdcMatches = normalized.filter((g) =>
-            g.principal && BDC_RE.test(g.principal) && String(g.action).toUpperCase() === 'SELECT'
-          );
-          out.checks.push({
-            check: `SHOW GRANTS ON SHARE \`${s.name}\``,
-            sqlRun,
-            ok: true,
-            count: normalized.length,
-            sample: normalized,
-            publishedToBdc: bdcMatches.length > 0,
-            bdcGrantPrincipals: bdcMatches.map((m) => m.principal),
-            rule: "share is publishedToBdc iff any principal matches /^bdc-connect-/i AND action = 'SELECT'",
-          });
-        } catch (e) {
-          out.checks.push({ check: `SHOW GRANTS ON SHARE \`${s.name}\``, sqlRun, ok: false, status: e.status, message: e.message, details: e.details });
+      out.checks.push({ check: 'SHOW SHARES (user OBO)', sqlRun: 'SHOW SHARES', ok: true, count: shares.length, sample: shares.slice(0, 3) });
+      if (v2Rows) {
+        const v2Bdc = new Map();
+        for (const r of v2Rows) {
+          if (!v2Bdc.has(r.share_name)) v2Bdc.set(r.share_name, new Set());
+          if (r.recipient_name && String(r.privilege_type).toUpperCase() === 'SELECT' && isBdcRecipient(r.recipient_name)) {
+            v2Bdc.get(r.share_name).add(r.recipient_name);
+          }
         }
+        const sample = shares.slice(0, PARITY_SAMPLE);
+        const diffs = await mapLimit(sample, 4, async (sh) => {
+          const grants = await showGrantsOnShare(req, warehouseId, sh.name).catch(() => null);
+          if (!grants) return { share: sh.name, error: 'SHOW GRANTS failed' };
+          const show = new Set(grants
+            .filter((g) => String(g.privilege || g.action_type || '').toUpperCase() === 'SELECT')
+            .map((g) => g.recipient || g.principal)
+            .filter((n) => n && isBdcRecipient(n)));
+          const is = v2Bdc.get(sh.name) || new Set();
+          const onlyShow = [...show].filter((n) => !is.has(n));
+          const onlyIs = [...is].filter((n) => !show.has(n));
+          return { share: sh.name, inInformationSchema: v2Bdc.has(sh.name), onlyShow, onlyIs };
+        });
+        const mismatches = diffs.filter((d) => d.error || !d.inInformationSchema || d.onlyShow.length || d.onlyIs.length);
+        out.checks.push({
+          check: `Parity: information_schema vs SHOW GRANTS (${sample.length} share sample)`,
+          ok: mismatches.length === 0,
+          message: mismatches.length ? `${mismatches.length} share(s) differ` : undefined,
+          count: sample.length,
+          sample: mismatches.length ? mismatches : diffs.slice(0, 3),
+        });
       }
     } catch (e) {
-      out.checks.push({ check: 'SHOW SHARES', sqlRun: QUERIES.listShares, ok: false, status: e.status, message: e.message, details: e.details });
+      out.checks.push({ check: 'SHOW SHARES', sqlRun: 'SHOW SHARES', ok: false, status: e.status, message: e.message, details: e.details });
     }
 
     try {

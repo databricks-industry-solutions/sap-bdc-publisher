@@ -1,13 +1,12 @@
 import { Router } from 'express';
-import {
-  submitBdcPublishJob,
-  getJobRun,
-  getJobRunOutput,
-  grantSelectOnShare,
-} from '../dbx.js';
+import { submitBdcPublishJob, grantSelectOnShare, getShareSourceSummary } from '../dbx.js';
 import { ensureNotebooks } from '../notebooks.js';
-import { requireRequestUser, getRequestUser } from '../auth.js';
-import { writeActivityEvent, shouldLogTerminalOnce } from '../activity.js';
+import { requireRequestUser } from '../auth.js';
+import { writeActivityEvent, noteWarehouse } from '../activity.js';
+import { trackRun, clearPendingRevoke } from '../runs.js';
+import { describeRun } from '../lib/runView.js';
+import { invalidate } from '../lib/budget.js';
+import { userKey } from '../lib/identity.js';
 
 const router = Router();
 
@@ -18,58 +17,50 @@ async function resolveNotebookPath() {
   return p;
 }
 
+// POST /api/publish
+// Body: { shareName, recipientName, warehouseId, title, shortDescription,
+//         description, primaryKeys, republish }
+// republish=true is "Update in BDC": the grant already exists, so only the
+// job runs (ORD + CSN upsert + publish).
 router.post('/', async (req, res, next) => {
   try {
     const {
-      shareName,
-      recipientName,
-      warehouseId,
-      title,
-      shortDescription,
-      description,
-      primaryKeys,
+      shareName, recipientName, warehouseId,
+      title, shortDescription, description, primaryKeys, republish,
     } = req.body || {};
     if (!shareName || !recipientName) {
-      const err = new Error('shareName and recipientName are required');
-      err.status = 400;
-      throw err;
+      const err = new Error('shareName and recipientName are required'); err.status = 400; throw err;
     }
     if (!warehouseId) {
-      const err = new Error('warehouseId is required');
-      err.status = 400;
-      throw err;
+      const err = new Error('warehouseId is required'); err.status = 400; throw err;
     }
-
     const user = requireRequestUser(req);
+    const userEmail = user.email || user.userName;
+    const action = republish ? 'republish' : 'publish';
+    noteWarehouse(warehouseId);
 
-    // Step 0: GRANT runs as the user via OBO. UC enforces ALTER/ownership on
-    // the share — if the user can't grant, fail fast with a clear message
-    // before we spin up a Job.
-    try {
-      await grantSelectOnShare(req, warehouseId, shareName, recipientName);
-    } catch (e) {
-      void writeActivityEvent({
-        eventType: 'publish_grant_failed',
-        action: 'publish',
-        userEmail: user.email || user.userName,
-        shareName, recipientName,
-        warehouseId,
-        errorCode: e.code || 'grant_failed',
-        errorMessage: e.message,
-      });
-      e.status = e.status || 400;
-      e.code = 'grant_failed';
-      e.message = `GRANT SELECT ON SHARE failed: ${e.message}. ` +
-        `You need ALTER (or ownership) on share \`${shareName}\` to grant it ` +
-        `to recipient \`${recipientName}\`.`;
-      throw e;
+    // The GRANT runs as the user via OBO. If they can't grant, fail before
+    // a job starts.
+    if (!republish) {
+      try {
+        await grantSelectOnShare(req, warehouseId, shareName, recipientName);
+      } catch (e) {
+        void writeActivityEvent({
+          eventType: 'publish_grant_failed', action: 'publish', userEmail,
+          shareName, recipientName, warehouseId,
+          errorCode: e.code || 'grant_failed', errorMessage: e.message,
+        });
+        e.status = e.status || 400;
+        e.code = 'grant_failed';
+        e.message = `GRANT SELECT ON SHARE failed: ${e.message}. ` +
+          `To grant share \`${shareName}\` to \`${recipientName}\` you need to own the share and have USE RECIPIENT, ` +
+          `or have USE RECIPIENT, USE SHARE and SET SHARE PERMISSION.`;
+        throw e;
+      }
     }
 
     const notebookPath = await resolveNotebookPath();
-    const pkJson = primaryKeys && typeof primaryKeys === 'object'
-      ? JSON.stringify(primaryKeys)
-      : '{}';
-
+    const pkJson = primaryKeys && typeof primaryKeys === 'object' ? JSON.stringify(primaryKeys) : '{}';
     const submitted = await submitBdcPublishJob({
       notebookPath,
       parameters: {
@@ -82,92 +73,29 @@ router.post('/', async (req, res, next) => {
       },
     });
 
-    void writeActivityEvent({
-      eventType: 'publish_submitted',
-      action: 'publish',
-      userEmail: user.email || user.userName,
-      shareName, recipientName,
-      runId: submitted.run_id,
-      warehouseId,
-      metadata: { title: title || shareName, shortDescription: shortDescription || shareName },
-    });
+    trackRun({ runId: submitted.run_id, action, shareName, recipientName, userEmail, warehouseId });
+    clearPendingRevoke(shareName, recipientName);
+    invalidate(`shares:${userKey(req)}:`);
+    invalidate('dashboard:');
 
-    res.json({
-      ok: true,
-      runId: submitted.run_id,
-      submittedBy: user.userName,
-      notebookPath,
+    // Log the submit after answering, with the share's table count and the
+    // latest source change for drift tracking. Best effort.
+    res.json({ ok: true, runId: submitted.run_id, submittedBy: user.userName, notebookPath, action });
+    let summary = null;
+    try { summary = (await getShareSourceSummary(req, warehouseId, [shareName]))[0] || null; } catch { /* optional */ }
+    void writeActivityEvent({
+      eventType: `${action}_submitted`, action: 'publish', userEmail,
+      shareName, recipientName, runId: submitted.run_id, warehouseId,
+      shareObjectCount: summary ? summary.table_count : null,
+      sourceLastAltered: summary ? summary.source_last_altered : null,
+      metadata: { title: title || shareName, shortDescription: shortDescription || shareName, primaryKeys: primaryKeys || {} },
     });
   } catch (err) { next(err); }
 });
 
 router.get('/:runId', async (req, res, next) => {
   try {
-    const run = await getJobRun(req.params.runId);
-    const life = run.state?.life_cycle_state || run.status?.state || 'UNKNOWN';
-    const result = run.state?.result_state || '';
-    const terminal = life === 'TERMINATED' || life === 'INTERNAL_ERROR' || life === 'SKIPPED';
-    const failed = terminal && result !== 'SUCCESS';
-    const warehouseId = String(req.query.warehouseId || '');
-    const user = getRequestUser(req);
-
-    const out = {
-      runId: run.run_id,
-      state: run.state,
-      status: run.status,
-      runPageUrl: run.run_page_url,
-      startTime: run.start_time,
-      endTime: run.end_time,
-      stateMessage: run.state?.state_message || null,
-      tasks: (run.tasks || []).map((t) => ({
-        taskKey: t.task_key,
-        runId: t.run_id,
-        state: t.state,
-        runPageUrl: t.run_page_url,
-      })),
-    };
-
-    // On failure, pull the task-level output so we surface the Python error
-    // message + short trace back to the UI instead of a generic status.
-    if (failed) {
-      const taskRunId = (run.tasks && run.tasks[0] && run.tasks[0].run_id) || run.run_id;
-      try {
-        const o = await getJobRunOutput(taskRunId);
-        out.error = {
-          message: o.error || run.state?.state_message || null,
-          trace: o.error_trace || null,
-          notebookExit: o.notebook_output?.result || null,
-          logs: o.logs || null,
-          logsTruncated: !!o.logs_truncated,
-          taskRunId,
-        };
-      } catch (e) {
-        out.error = {
-          message: run.state?.state_message || 'Job failed (could not fetch task output)',
-          detail: e.message,
-          taskRunId,
-        };
-      }
-    }
-
-    if (terminal) {
-      const eventType = result === 'SUCCESS' ? 'publish_job_succeeded' : 'publish_job_failed';
-      if (shouldLogTerminalOnce(req.params.runId, eventType)) {
-        void writeActivityEvent({
-          eventType,
-          action: 'publish',
-          userEmail: user.email || user.userName,
-          shareName: req.query.shareName || '',
-          recipientName: req.query.recipientName || '',
-          runId: req.params.runId,
-          warehouseId,
-          errorCode: failed ? (run.state?.state_message ? 'job_failed' : 'unknown') : null,
-          errorMessage: failed ? (out.error?.message || run.state?.state_message || null) : null,
-        });
-      }
-    }
-
-    res.json(out);
+    res.json(await describeRun(req.params.runId));
   } catch (err) { next(err); }
 });
 

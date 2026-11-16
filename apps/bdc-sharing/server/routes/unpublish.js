@@ -1,13 +1,12 @@
 import { Router } from 'express';
-import {
-  submitBdcUnpublishJob,
-  getJobRun,
-  getJobRunOutput,
-  revokeSelectOnShare,
-} from '../dbx.js';
+import { submitBdcUnpublishJob, revokeSelectOnShare } from '../dbx.js';
 import { ensureNotebooks } from '../notebooks.js';
-import { requireRequestUser, getRequestUser } from '../auth.js';
-import { writeActivityEvent, shouldLogTerminalOnce } from '../activity.js';
+import { requireRequestUser } from '../auth.js';
+import { writeActivityEvent, noteWarehouse } from '../activity.js';
+import { trackRun, getRunRecord, getPendingRevokes, clearPendingRevoke } from '../runs.js';
+import { describeRun } from '../lib/runView.js';
+import { invalidate, mapLimit } from '../lib/budget.js';
+import { userKey } from '../lib/identity.js';
 
 const router = Router();
 
@@ -18,160 +17,112 @@ async function resolveNotebookPath() {
   return p;
 }
 
+// The Job runs delete_share on the BDC side as the SP. The REVOKE on the
+// Databricks side runs only after that succeeded, as the user, so consumers
+// keep SELECT if the BDC teardown fails.
 router.post('/', async (req, res, next) => {
   try {
     const { shareName, recipientName, warehouseId } = req.body || {};
     if (!shareName || !recipientName) {
-      const err = new Error('shareName and recipientName are required');
-      err.status = 400;
-      throw err;
+      const err = new Error('shareName and recipientName are required'); err.status = 400; throw err;
     }
     if (!warehouseId) {
-      const err = new Error('warehouseId is required');
-      err.status = 400;
-      throw err;
+      const err = new Error('warehouseId is required'); err.status = 400; throw err;
     }
-
-    const notebookPath = await resolveNotebookPath();
     const user = requireRequestUser(req);
-
-    // The Job runs delete_share on the BDC side as the SP. The REVOKE on the
-    // Databricks side is intentionally deferred to /finalize, which runs as
-    // the user via OBO once the BDC delete has succeeded — so consumers
-    // don't lose SELECT mid-read if the BDC teardown fails.
+    const userEmail = user.email || user.userName;
+    noteWarehouse(warehouseId);
+    const notebookPath = await resolveNotebookPath();
     const submitted = await submitBdcUnpublishJob({
       notebookPath,
-      parameters: {
-        recipient_name: recipientName,
-        share_name: shareName,
-      },
+      parameters: { recipient_name: recipientName, share_name: shareName },
     });
-
+    trackRun({ runId: submitted.run_id, action: 'delete', shareName, recipientName, userEmail, warehouseId });
     void writeActivityEvent({
-      eventType: 'delete_submitted',
-      action: 'delete',
-      userEmail: user.email || user.userName,
-      shareName, recipientName,
-      runId: submitted.run_id,
-      warehouseId,
+      eventType: 'delete_submitted', action: 'delete', userEmail,
+      shareName, recipientName, runId: submitted.run_id, warehouseId,
     });
-
-    res.json({
-      ok: true,
-      runId: submitted.run_id,
-      submittedBy: user.userName,
-      notebookPath,
-    });
+    res.json({ ok: true, runId: submitted.run_id, submittedBy: user.userName, notebookPath });
   } catch (err) { next(err); }
 });
 
-// Called by the UI after the unpublish Job lands SUCCESS. Runs REVOKE SELECT
-// ON SHARE as the user via OBO, completing the teardown on the Databricks
-// side. Idempotent — REVOKE on a grant that no longer exists is a no-op.
+async function revokeAndLog(req, { shareName, recipientName, runId, warehouseId, userEmail }) {
+  try {
+    await revokeSelectOnShare(req, warehouseId, shareName, recipientName);
+  } catch (e) {
+    void writeActivityEvent({
+      eventType: 'delete_finalize_failed', action: 'delete', userEmail,
+      shareName, recipientName, runId, warehouseId,
+      errorCode: e.code || 'revoke_failed', errorMessage: e.message,
+    });
+    return { ok: false, shareName, recipientName, error: e.message };
+  }
+  clearPendingRevoke(shareName, recipientName);
+  await writeActivityEvent({
+    eventType: 'delete_finalized', action: 'delete', userEmail,
+    shareName, recipientName, runId, warehouseId,
+  });
+  return { ok: true, shareName, recipientName };
+}
+
+// GET /api/unpublish/pending — the caller's deletes still waiting for REVOKE.
+router.get('/pending', async (req, res, next) => {
+  try {
+    const user = requireRequestUser(req);
+    const warehouseId = String(req.query.warehouseId || '') || undefined;
+    if (warehouseId) noteWarehouse(warehouseId);
+    res.json({ pending: await getPendingRevokes(user.email || user.userName, warehouseId) });
+  } catch (err) { next(err); }
+});
+
+// POST /api/unpublish/finalize-pending — run every pending REVOKE for the
+// caller. The UI calls this on page load, so a delete whose tab was closed
+// is completed the next time that user opens the app.
+router.post('/finalize-pending', async (req, res, next) => {
+  try {
+    const user = requireRequestUser(req);
+    const userEmail = user.email || user.userName;
+    const { warehouseId } = req.body || {};
+    if (!warehouseId) { const err = new Error('warehouseId is required'); err.status = 400; throw err; }
+    noteWarehouse(warehouseId);
+    const pending = await getPendingRevokes(userEmail, warehouseId);
+    const results = await mapLimit(pending, 2, (p) => revokeAndLog(req, { ...p, warehouseId, userEmail }));
+    if (results.length) { invalidate(`shares:${userKey(req)}:`); invalidate('dashboard:'); }
+    res.json({ ok: results.every((r) => r.ok), results });
+  } catch (err) { next(err); }
+});
+
+// POST /api/unpublish/:runId/finalize — REVOKE for one finished delete.
+// Share and connection come from the server-side record of the submit; the
+// body is only a fallback for runs submitted before an app restart without
+// an activity table.
 router.post('/:runId/finalize', async (req, res, next) => {
   try {
-    const { shareName, recipientName, warehouseId } = req.body || {};
-    if (!shareName || !recipientName || !warehouseId) {
-      const err = new Error('shareName, recipientName, and warehouseId are required');
-      err.status = 400;
-      throw err;
-    }
     const user = requireRequestUser(req);
-    try {
-      await revokeSelectOnShare(req, warehouseId, shareName, recipientName);
-    } catch (e) {
-      void writeActivityEvent({
-        eventType: 'delete_finalize_failed',
-        action: 'delete',
-        userEmail: user.email || user.userName,
-        shareName, recipientName,
-        runId: req.params.runId,
-        warehouseId,
-        errorCode: e.code || 'revoke_failed',
-        errorMessage: e.message,
-      });
-      e.status = e.status || 400;
-      e.code = 'revoke_failed';
-      e.message = `REVOKE SELECT ON SHARE failed: ${e.message}`;
-      throw e;
+    const body = req.body || {};
+    const warehouseId = body.warehouseId;
+    if (!warehouseId) { const err = new Error('warehouseId is required'); err.status = 400; throw err; }
+    const rec = await getRunRecord(req.params.runId);
+    const shareName = (rec && rec.shareName) || body.shareName;
+    const recipientName = (rec && rec.recipientName) || body.recipientName;
+    if (!shareName || !recipientName) {
+      const err = new Error('Unknown run; pass shareName and recipientName'); err.status = 400; err.code = 'unknown_run'; throw err;
     }
-    void writeActivityEvent({
-      eventType: 'delete_finalized',
-      action: 'delete',
-      userEmail: user.email || user.userName,
-      shareName, recipientName,
-      runId: req.params.runId,
-      warehouseId,
+    const r = await revokeAndLog(req, {
+      shareName, recipientName, runId: req.params.runId, warehouseId, userEmail: user.email || user.userName,
     });
-    res.json({ ok: true, runId: req.params.runId });
+    invalidate(`shares:${userKey(req)}:`);
+    invalidate('dashboard:');
+    if (!r.ok) {
+      const err = new Error(`REVOKE SELECT ON SHARE failed: ${r.error}`); err.status = 400; err.code = 'revoke_failed'; throw err;
+    }
+    res.json({ ok: true, runId: req.params.runId, shareName, recipientName });
   } catch (err) { next(err); }
 });
 
 router.get('/:runId', async (req, res, next) => {
   try {
-    const run = await getJobRun(req.params.runId);
-    const life = run.state?.life_cycle_state || run.status?.state || 'UNKNOWN';
-    const result = run.state?.result_state || '';
-    const terminal = life === 'TERMINATED' || life === 'INTERNAL_ERROR' || life === 'SKIPPED';
-    const failed = terminal && result !== 'SUCCESS';
-    const warehouseId = String(req.query.warehouseId || '');
-    const user = getRequestUser(req);
-
-    const out = {
-      runId: run.run_id,
-      state: run.state,
-      status: run.status,
-      runPageUrl: run.run_page_url,
-      startTime: run.start_time,
-      endTime: run.end_time,
-      stateMessage: run.state?.state_message || null,
-      tasks: (run.tasks || []).map((t) => ({
-        taskKey: t.task_key,
-        runId: t.run_id,
-        state: t.state,
-        runPageUrl: t.run_page_url,
-      })),
-    };
-
-    if (failed) {
-      const taskRunId = (run.tasks && run.tasks[0] && run.tasks[0].run_id) || run.run_id;
-      try {
-        const o = await getJobRunOutput(taskRunId);
-        out.error = {
-          message: o.error || run.state?.state_message || null,
-          trace: o.error_trace || null,
-          notebookExit: o.notebook_output?.result || null,
-          logs: o.logs || null,
-          logsTruncated: !!o.logs_truncated,
-          taskRunId,
-        };
-      } catch (e) {
-        out.error = {
-          message: run.state?.state_message || 'Job failed (could not fetch task output)',
-          detail: e.message,
-          taskRunId,
-        };
-      }
-    }
-
-    if (terminal) {
-      const eventType = result === 'SUCCESS' ? 'delete_job_succeeded' : 'delete_job_failed';
-      if (shouldLogTerminalOnce(req.params.runId, eventType)) {
-        void writeActivityEvent({
-          eventType,
-          action: 'delete',
-          userEmail: user.email || user.userName,
-          shareName: req.query.shareName || '',
-          recipientName: req.query.recipientName || '',
-          runId: req.params.runId,
-          warehouseId,
-          errorCode: failed ? (run.state?.state_message ? 'job_failed' : 'unknown') : null,
-          errorMessage: failed ? (out.error?.message || run.state?.state_message || null) : null,
-        });
-      }
-    }
-
-    res.json(out);
+    res.json(await describeRun(req.params.runId));
   } catch (err) { next(err); }
 });
 
