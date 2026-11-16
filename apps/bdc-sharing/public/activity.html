@@ -139,9 +139,11 @@
       <div><div class="brand-name">Data Sharing <span class="brand-sub">Activity</span></div></div>
     </div>
     <div class="header-actions">
-      <a href="/" title="Back to app">← Back to app</a>
-      <a href="/faq.html" title="Open FAQ">FAQ</a>
-      <a href="/docs.html" title="Open documentation" target="_blank">Documentation</a>
+      <a href="/">Publish</a>
+      <a href="/dashboard.html">Dashboard</a>
+      <a href="/activity.html" style="color:var(--text);font-weight:600">Activity</a>
+      <a href="/faq.html">FAQ</a>
+      <a href="/docs.html" target="_blank">Documentation</a>
       <div id="user-badge" class="user-badge"></div>
     </div>
   </header>
@@ -149,7 +151,7 @@
   <main class="main">
     <section class="welcome">
       <h1>Activity</h1>
-      <p>Recent publish &amp; delete events. Each row is a state transition — submit, job success or failure, REVOKE — with the user, share, recipient, and a link to the underlying job run. Defaults to your own events; admins can switch to all users.</p>
+      <p>Recent publish and unpublish events. Each row is one step (submit, job result, REVOKE) with the user, share, BDC connection, and a link to the job run. Shows your own events; admins can switch to all users. For trends, see the <a href="/dashboard.html">Dashboard</a>.</p>
     </section>
 
     <section class="panel">
@@ -176,8 +178,8 @@
 const WH_KEY = 'data-sharing:warehouseId';
 const ui = { showAll: false, workspaceHost: '', warehouseId: null };
 
-async function api(method, path) {
-  const res = await fetch(path, { method, headers: { Accept: 'application/json' }, credentials: 'include' });
+async function api(method, path, opts) {
+  const res = await fetch(path, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, credentials: 'include', ...(opts || {}) });
   const txt = await res.text();
   let data = null;
   try { data = txt ? JSON.parse(txt) : null; } catch { data = { raw: txt }; }
@@ -195,7 +197,9 @@ function pillForEvent(t) {
   if (!t) return { kind: 'pending', label: '—' };
   if (t.endsWith('_succeeded') || t === 'delete_finalized') return { kind: 'ok', label: 'Success' };
   if (t.endsWith('_failed')) return { kind: 'err', label: 'Failed' };
-  if (t === 'publish_submitted' || t === 'delete_submitted') return { kind: 'pending', label: 'Submitted' };
+  if (t.endsWith('_submitted')) return { kind: 'pending', label: 'Submitted' };
+  if (t === 'delete_revoke_pending') return { kind: 'pending', label: 'Pending' };
+  if (t === 'sp_grant_applied') return { kind: 'ok', label: 'Granted' };
   return { kind: 'pending', label: t };
 }
 function eventLabel(t) {
@@ -209,6 +213,12 @@ function eventLabel(t) {
     delete_job_failed:       'Delete job failed',
     delete_finalized:        'REVOKE applied',
     delete_finalize_failed:  'REVOKE failed',
+    delete_revoke_pending:   'REVOKE pending',
+    republish_submitted:     'Update submitted',
+    republish_job_succeeded: 'Update succeeded',
+    republish_job_failed:    'Update job failed',
+    publish_preflight_failed: 'Stopped by pre-flight',
+    sp_grant_applied:        'App SP access granted',
   };
   return map[t] || t || '—';
 }
@@ -295,6 +305,33 @@ function renderConfigFooter(table, source) {
     'Logging to <code>' + escHtml(table) + '</code>' +
     (sourceLabel ? '<span class="config-source-badge">via ' + escHtml(sourceLabel) + '</span>' : '');
   el('activity-body').parentElement.appendChild(footer);
+  checkMigration(footer);
+}
+
+// Tables created before v2 lack the columns the Dashboard uses. The table
+// owner can add them here; the SP only has MODIFY and can't.
+async function checkMigration(footer) {
+  try {
+    const st = await api('GET', '/api/setup/activity-status?warehouseId=' + encodeURIComponent(ui.warehouseId));
+    if (!st.missingColumns || !st.missingColumns.length) return;
+    const box = document.createElement('div');
+    box.style.marginTop = '10px';
+    box.innerHTML = 'This table is missing the v2 columns <code>' + st.missingColumns.map(escHtml).join('</code>, <code>') + '</code>. ' +
+      '<button type="button" class="btn secondary" id="migrate-btn">Add columns</button> <span id="migrate-msg"></span>';
+    footer.appendChild(box);
+    el('migrate-btn').onclick = async () => {
+      el('migrate-btn').disabled = true;
+      el('migrate-msg').textContent = 'Altering table…';
+      try {
+        const r = await api('POST', '/api/setup/migrate-activity', { body: JSON.stringify({ warehouseId: ui.warehouseId }) });
+        box.innerHTML = 'Added ' + (r.added || []).map(escHtml).join(', ') + '.';
+      } catch (e) {
+        const sql = e.payload && e.payload.sql;
+        el('migrate-msg').innerHTML = escHtml(e.message) + (sql ? '<pre class="code" style="white-space:pre-wrap">' + escHtml(sql) + '</pre>' : '');
+        el('migrate-btn').disabled = false;
+      }
+    };
+  } catch { /* optional */ }
 }
 
 async function renderWizard() {
