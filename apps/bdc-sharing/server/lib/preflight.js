@@ -13,11 +13,11 @@ const GRANT_REQUIREMENT =
   'Granting a share to a recipient needs share ownership plus USE RECIPIENT, ' +
   'or USE RECIPIENT + USE SHARE + SET SHARE PERMISSION.';
 
-export async function runPreflight(req, { shareName, recipientName, warehouseId, primaryKeys = {}, applyGrants = true }) {
+export async function runPreflight(req, { shareName, recipientName, warehouseId, primaryKeys = {}, applyGrants = true, refresh = false }) {
   const spId = process.env.DATABRICKS_CLIENT_ID || null;
   const user = getRequestUser(req);
   const [detail, overview] = await Promise.all([
-    loadShareDetail(req, warehouseId, shareName),
+    loadShareDetail(req, warehouseId, shareName, { refresh }),
     loadOverview(req, warehouseId),
   ]);
   const share = overview.shares.find((s) => s.name === shareName) || null;
@@ -47,8 +47,17 @@ export async function runPreflight(req, { shareName, recipientName, warehouseId,
   }
 
   // (b) Primary keys
-  const missingPk = detail.tables.filter((t) => !t.hasPrimaryKey && !(primaryKeys[t.sharedAs] || []).length);
-  if (missingPk.length) {
+  const unknown = detail.tables.filter((t) => !t.columnsKnown);
+  const missingPk = detail.tables.filter((t) => t.columnsKnown && !t.hasPrimaryKey && !(primaryKeys[t.sharedAs] || []).length);
+  if (detail.columnsError || unknown.length) {
+    checks.push({
+      id: 'pk', label: 'Primary keys', status: 'warn',
+      detail: detail.columnsError
+        ? `Couldn't read columns and keys from Unity Catalog (${detail.columnsError}). Re-check to try again.`
+        : `Columns aren't visible to you for ${unknown.length} table(s): ${unknown.map((t) => t.sharedAs).join(', ')}. Their keys can't be checked here.`,
+      tables: unknown.map((t) => t.sharedAs),
+    });
+  } else if (missingPk.length) {
     checks.push({
       id: 'pk', label: 'Primary keys', status: 'warn',
       detail: `${missingPk.length} table(s) have no primary key in Unity Catalog and none was picked: ` +

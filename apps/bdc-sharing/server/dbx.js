@@ -362,35 +362,83 @@ export async function listRecipientsInfo(req, warehouseId) {
     `FROM ${IS}.recipients ORDER BY recipient_name`);
 }
 
-// Columns + UC primary key for a set of tables, in one statement.
-// fullNames: ['cat.schema.table', ...]. Returns Map(lowercased fullName ->
-// { columns: [{name, type}], primaryKey: [col, ...] }).
-export async function getTablesColumnsAndPk(req, warehouseId, fullNames) {
-  const out = new Map();
-  const names = Array.from(new Set(fullNames.map((n) => String(n).toLowerCase()).filter((n) => n.split('.').length === 3)));
-  for (let i = 0; i < names.length; i += 200) {
-    const chunk = names.slice(i, i + 200);
-    const catalogs = Array.from(new Set(chunk.map((n) => n.split('.')[0])));
-    const rows = await sqlQuery(req, warehouseId,
-      `SELECT c.table_catalog, c.table_schema, c.table_name, c.column_name, c.data_type, c.ordinal_position, ` +
-      `pk.ordinal_position AS pk_position ` +
-      `FROM ${IS}.columns c ` +
-      `LEFT JOIN (SELECT kcu.table_catalog, kcu.table_schema, kcu.table_name, kcu.column_name, kcu.ordinal_position ` +
-      `FROM ${IS}.table_constraints tc JOIN ${IS}.key_column_usage kcu ` +
-      `ON tc.constraint_catalog = kcu.constraint_catalog AND tc.constraint_schema = kcu.constraint_schema ` +
-      `AND tc.constraint_name = kcu.constraint_name WHERE tc.constraint_type = 'PRIMARY KEY') pk ` +
-      `ON pk.table_catalog = c.table_catalog AND pk.table_schema = c.table_schema ` +
-      `AND pk.table_name = c.table_name AND pk.column_name = c.column_name ` +
-      `WHERE c.table_catalog IN (${catalogs.map(sqlStr).join(', ')}) ` +
-      `AND lower(concat_ws('.', c.table_catalog, c.table_schema, c.table_name)) IN (${chunk.map(sqlStr).join(', ')}) ` +
-      `ORDER BY c.table_catalog, c.table_schema, c.table_name, c.ordinal_position`);
-    for (const r of rows) {
-      const key = `${r.table_catalog}.${r.table_schema}.${r.table_name}`.toLowerCase();
-      if (!out.has(key)) out.set(key, { columns: [], pk: [] });
-      const t = out.get(key);
-      t.columns.push({ name: r.column_name, type: r.data_type || null });
-      if (r.pk_position != null) t.pk.push({ name: r.column_name, pos: Number(r.pk_position) });
+// Group 'cat.schema.table' names by catalog. Lowercased, because
+// information_schema stores identifiers in lower case.
+function byCatalog(fullNames) {
+  const m = new Map();
+  for (const n of fullNames) {
+    const parts = String(n).toLowerCase().split('.');
+    if (parts.length !== 3) continue;
+    const [cat, sch, tbl] = parts;
+    if (!m.has(cat)) m.set(cat, { schemas: new Set(), tables: new Set(), full: new Set() });
+    const e = m.get(cat);
+    e.schemas.add(sch); e.tables.add(tbl); e.full.add(`${cat}.${sch}.${tbl}`);
+  }
+  return m;
+}
+
+async function mapLimitLocal(items, limit, fn) {
+  const out = new Array(items.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) { const idx = i++; out[idx] = await fn(items[idx]); }
+  }));
+  return out;
+}
+
+// Run one information_schema query per source catalog. The catalog-local
+// views (<catalog>.information_schema) with plain equality filters answer
+// in seconds. The metastore-wide system.information_schema views, joined
+// unfiltered or filtered through expressions, took minutes on a large
+// metastore (194s measured), so they are only a fallback here, still with
+// equality filters on catalog, schema and table.
+async function perCatalog(req, warehouseId, fullNames, build) {
+  const groups = byCatalog(fullNames);
+  const results = await mapLimitLocal(Array.from(groups.entries()), 4, async ([cat, g]) => {
+    const schemas = Array.from(g.schemas).map(sqlStr).join(', ');
+    const tables = Array.from(g.tables).map(sqlStr).join(', ');
+    let rows;
+    try {
+      rows = await sqlQuery(req, warehouseId, build(`${idQ(cat)}.information_schema`, schemas, tables, null));
+    } catch (e) {
+      // Catalogs without their own information_schema fall back to the
+      // system views.
+      rows = await sqlQuery(req, warehouseId, build(IS, schemas, tables, sqlStr(cat)));
     }
+    // schema IN (...) AND table IN (...) can match pairs that aren't in the
+    // share; keep only the requested tables.
+    return rows
+      .map((r) => ({ ...r, _full: `${cat}.${String(r.table_schema).toLowerCase()}.${String(r.table_name).toLowerCase()}` }))
+      .filter((r) => g.full.has(r._full));
+  });
+  return results.flat();
+}
+
+// Columns + UC primary key for a set of tables. One statement per source
+// catalog (usually one in total). fullNames: ['cat.schema.table', ...].
+// Returns Map(lowercased fullName -> { columns: [{name, type}], primaryKey }).
+export async function getTablesColumnsAndPk(req, warehouseId, fullNames) {
+  const rows = await perCatalog(req, warehouseId, fullNames, (isv, schemas, tables, catFilter) => {
+    const catC = catFilter ? `AND c.table_catalog = ${catFilter} ` : '';
+    const catT = catFilter ? `AND tc.table_catalog = ${catFilter} ` : '';
+    return `SELECT c.table_schema, c.table_name, c.column_name, c.data_type, c.ordinal_position, ` +
+      `pk.ordinal_position AS pk_position ` +
+      `FROM ${isv}.columns c ` +
+      `LEFT JOIN (SELECT kcu.table_schema, kcu.table_name, kcu.column_name, kcu.ordinal_position ` +
+      `FROM ${isv}.table_constraints tc JOIN ${isv}.key_column_usage kcu ` +
+      `ON tc.constraint_catalog = kcu.constraint_catalog AND tc.constraint_schema = kcu.constraint_schema ` +
+      `AND tc.constraint_name = kcu.constraint_name ` +
+      `WHERE tc.constraint_type = 'PRIMARY KEY' ${catT}AND tc.table_schema IN (${schemas}) AND tc.table_name IN (${tables})) pk ` +
+      `ON pk.table_schema = c.table_schema AND pk.table_name = c.table_name AND pk.column_name = c.column_name ` +
+      `WHERE c.table_schema IN (${schemas}) AND c.table_name IN (${tables}) ${catC}` +
+      `ORDER BY c.table_schema, c.table_name, c.ordinal_position`;
+  });
+  const out = new Map();
+  for (const r of rows) {
+    if (!out.has(r._full)) out.set(r._full, { columns: [], pk: [] });
+    const t = out.get(r._full);
+    t.columns.push({ name: r.column_name, type: r.data_type || null });
+    if (r.pk_position != null) t.pk.push({ name: r.column_name, pos: Number(r.pk_position) });
   }
   for (const t of out.values()) {
     t.primaryKey = t.pk.sort((a, b) => a.pos - b.pos).map((x) => x.name);
@@ -401,19 +449,39 @@ export async function getTablesColumnsAndPk(req, warehouseId, fullNames) {
 
 // Per-share summary for the dashboard and drift detection: table count,
 // tables without a UC primary key, and the latest last_altered across the
-// share's source tables. One statement for any number of shares.
+// share's source tables. One statement for the share-to-table mapping, then
+// one per source catalog.
 export async function getShareSourceSummary(req, warehouseId, shareNames) {
   if (!shareNames.length) return [];
-  return sqlQuery(req, warehouseId,
-    `SELECT u.share_name, COUNT(*) AS table_count, MAX(t.last_altered) AS source_last_altered, ` +
-    `SUM(CASE WHEN pk.table_name IS NULL THEN 1 ELSE 0 END) AS tables_without_pk ` +
-    `FROM ${IS}.table_share_usage u ` +
-    `LEFT JOIN ${IS}.tables t ON t.table_catalog = u.catalog_name AND t.table_schema = u.schema_name AND t.table_name = u.table_name ` +
-    `LEFT JOIN (SELECT DISTINCT table_catalog, table_schema, table_name FROM ${IS}.table_constraints ` +
-    `WHERE constraint_type = 'PRIMARY KEY') pk ` +
-    `ON pk.table_catalog = u.catalog_name AND pk.table_schema = u.schema_name AND pk.table_name = u.table_name ` +
-    `WHERE u.share_name IN (${shareNames.map(sqlStr).join(', ')}) ` +
-    `GROUP BY u.share_name`);
+  const usage = await sqlQuery(req, warehouseId,
+    `SELECT share_name, catalog_name, schema_name, table_name FROM ${IS}.table_share_usage ` +
+    `WHERE share_name IN (${shareNames.map(sqlStr).join(', ')})`);
+  const full = (u) => `${u.catalog_name}.${u.schema_name}.${u.table_name}`.toLowerCase();
+  const meta = await perCatalog(req, warehouseId, usage.map(full), (isv, schemas, tables, catFilter) => {
+    const catT = catFilter ? `AND t.table_catalog = ${catFilter} ` : '';
+    const catK = catFilter ? `AND table_catalog = ${catFilter} ` : '';
+    return `SELECT t.table_schema, t.table_name, t.last_altered, ` +
+      `CASE WHEN pk.table_name IS NULL THEN 0 ELSE 1 END AS has_pk ` +
+      `FROM ${isv}.tables t ` +
+      `LEFT JOIN (SELECT DISTINCT table_schema, table_name FROM ${isv}.table_constraints ` +
+      `WHERE constraint_type = 'PRIMARY KEY' ${catK}AND table_schema IN (${schemas}) AND table_name IN (${tables})) pk ` +
+      `ON pk.table_schema = t.table_schema AND pk.table_name = t.table_name ` +
+      `WHERE t.table_schema IN (${schemas}) AND t.table_name IN (${tables}) ${catT}`;
+  }).catch((e) => { console.error('[dbx] source metadata failed', e.message); return []; });
+  const byTable = new Map(meta.map((m) => [m._full, m]));
+  const byShare = new Map();
+  for (const u of usage) {
+    const s = byShare.get(u.share_name) || { share_name: u.share_name, table_count: 0, source_last_altered: null, tables_without_pk: 0, metadata_complete: true };
+    const m = byTable.get(full(u));
+    s.table_count += 1;
+    if (!m) s.metadata_complete = false;
+    if (m && m.last_altered && (!s.source_last_altered || Date.parse(m.last_altered) > Date.parse(s.source_last_altered))) {
+      s.source_last_altered = m.last_altered;
+    }
+    if (m && String(m.has_pk) !== '1') s.tables_without_pk += 1;
+    byShare.set(u.share_name, s);
+  }
+  return Array.from(byShare.values());
 }
 
 // -----------------------------------------------------------------------------

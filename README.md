@@ -150,7 +150,7 @@ enable it instead of an error.
 |---|---|---|
 | Inventory | nothing extra (your own UC access) | shares in BDC, BDC connections in use, tables, tables without a UC primary key, source tables changed after the last publish |
 | Publishing | the activity log | publish success rate, activity per day, failures by reason (linked to the FAQ), last publish per share, top publishers (admins) |
-| SAP reads | optional grant to the app SP (below) | queries, rows and bytes read per BDC connection and table, last read |
+| SAP reads | optional grant to the app SP (below) | queries, rows and bytes read per BDC connection, share and table, last read per share |
 
 The same data is available as an **AI/BI dashboard**
 (`apps/bdc-sharing/dashboards/bdc_sharing.lvdash.json`) for slicing,
@@ -173,7 +173,8 @@ GRANT SELECT ON TABLE system.access.audit TO `<app-sp-client-id>`;
 ```
 
 The SP can then read the whole audit table. The app only queries Delta
-Sharing query events for BDC connections the viewer can see. If that
+Sharing query events (`deltaSharingQueriedTable`, `deltaSharingQueriedTableChanges`)
+for BDC connections the viewer can see. If that
 trade-off doesn't fit, skip the grant or set `BDC_USAGE_FROM_AUDIT=false`.
 
 ---

@@ -239,10 +239,10 @@ function renderPublished(d) {
         '<td class="num">' + fmtNum(r.tables) + '</td><td class="num">' + fmtNum(r.tablesWithoutPk) + '</td>' +
         '<td>' + fmtDate(r.lastPublishedAt) + '</td><td>' + escHtml(r.lastPublishedBy || '—') + '</td>' +
         '<td>' + fmtDate(r.sourceLastAltered) + (drift ? ' <span class="badge starting">after publish</span>' : '') + '</td>' +
-        (showRead ? '<td>' + fmtAgo(r.lastReadByConnection) + '</td>' : '') + '</tr>';
+        (showRead ? '<td>' + fmtAgo(r.lastRead) + '</td>' : '') + '</tr>';
     }).join('') + '</tbody></table>' +
     (d.tier2.available ? '' : '<div class="muted" style="margin-top:8px">Last published needs the activity log.</div>') +
-    (showRead ? '<div class="muted" style="margin-top:4px">Last SAP read is per BDC connection: audit events name the recipient and the table, not the share.</div>' : '');
+    '';
 }
 
 function enableCard(t) {
@@ -350,6 +350,9 @@ function renderUsage(d) {
   el('usage').innerHTML = '<table class="grid"><thead><tr><th>BDC connection</th><th style="text-align:right">Queries</th><th style="text-align:right">Rows</th><th style="text-align:right">Scanned</th><th>Last read</th></tr></thead><tbody>' +
     t3.byConnection.map((c) => '<tr><td><code>' + escHtml(c.connection) + '</code></td><td class="num">' + fmtNum(c.queries) + '</td><td class="num">' + fmtNum(c.rows) + '</td><td class="num">' + fmtBytes(c.bytes) + '</td><td>' + fmtAgo(c.lastRead) + '</td></tr>').join('') +
     '</tbody></table>' +
+    '<details style="margin-top:10px"><summary>By share</summary><table class="grid" style="margin-top:8px"><thead><tr><th>Share</th><th>Connection</th><th style="text-align:right">Queries</th><th style="text-align:right">Scanned</th><th>Last read</th></tr></thead><tbody>' +
+    t3.byShare.map((x) => '<tr><td class="share-name">' + escHtml(x.shareName || '?') + '</td><td><code>' + escHtml(x.connection) + '</code></td><td class="num">' + fmtNum(x.queries) + '</td><td class="num">' + fmtBytes(x.bytes) + '</td><td>' + fmtAgo(x.lastRead) + '</td></tr>').join('') +
+    '</tbody></table></details>' +
     '<details style="margin-top:10px"><summary>Top tables</summary><table class="grid" style="margin-top:8px"><thead><tr><th>Table</th><th>Connection</th><th style="text-align:right">Queries</th><th style="text-align:right">Scanned</th></tr></thead><tbody>' +
     t3.byTable.map((t) => '<tr><td><code>' + escHtml(t.table || '?') + '</code></td><td><code>' + escHtml(t.connection) + '</code></td><td class="num">' + fmtNum(t.queries) + '</td><td class="num">' + fmtBytes(t.bytes) + '</td></tr>').join('') +
     '</tbody></table></details>';

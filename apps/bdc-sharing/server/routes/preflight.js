@@ -26,6 +26,7 @@ router.post('/', (req, res, next) => {
       warehouseId: b.warehouseId,
       primaryKeys: b.primaryKeys || {},
       applyGrants: b.applyGrants !== false,
+      refresh: !!b.refresh,
     }),
     { ttlMs: 10_000, refresh: !!b.refresh });
 });

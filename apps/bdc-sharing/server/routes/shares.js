@@ -156,7 +156,7 @@ router.get('/', (req, res, next) => {
     { ttlMs: 30_000, refresh: !!req.query.refresh });
 });
 
-export async function loadShareDetail(req, warehouseId, name) {
+async function buildShareDetail(req, warehouseId, name) {
   const identity = await getIdentity(req);
   const [descRows, objRows] = await Promise.all([
     describeShare(req, warehouseId, name),
@@ -176,19 +176,24 @@ export async function loadShareDetail(req, warehouseId, name) {
 
   const tableObjs = objects.filter((o) => o.dataObjectType === 'TABLE');
   let meta = new Map();
+  let columnsError = null;
   try {
     meta = await getTablesColumnsAndPk(req, warehouseId, tableObjs.map((o) => o.fullName));
   } catch (e) {
     console.error('[shares] column/PK lookup failed', e.message);
+    columnsError = e.message;
   }
   const tables = tableObjs.map((o) => {
-    const m = meta.get(String(o.fullName).toLowerCase()) || { columns: [], primaryKey: [] };
+    const m = meta.get(String(o.fullName).toLowerCase());
     return {
       sharedAs: o.sharedAs || o.fullName,
       fullName: o.fullName,
-      columns: m.columns,
-      primaryKey: m.primaryKey,
-      hasPrimaryKey: m.primaryKey.length > 0,
+      columns: m ? m.columns : [],
+      primaryKey: m ? m.primaryKey : [],
+      hasPrimaryKey: !!(m && m.primaryKey.length),
+      // false when the lookup failed or the table isn't visible: "no key"
+      // would then be a guess, so callers must not treat it as missing.
+      columnsKnown: !!m,
     };
   });
   return {
@@ -196,7 +201,26 @@ export async function loadShareDetail(req, warehouseId, name) {
     isOwner: ownsPrincipal(identity, owner),
     userGrants: [],
     objects, tables, count: tables.length,
+    columnsError,
   };
+}
+
+// The panel and pre-flight both need the share contents. One cached copy
+// per user, warehouse and share, so pre-flight doesn't run the metadata
+// queries a second time. Failed lookups are not cached.
+const DETAIL_TTL_MS = 30_000;
+const detailCache = new Map();
+export function loadShareDetail(req, warehouseId, name, { refresh = false } = {}) {
+  const key = `${userKey(req)}\0${warehouseId}\0${name}`;
+  const hit = detailCache.get(key);
+  if (hit && !refresh && Date.now() - hit.at < DETAIL_TTL_MS) return hit.promise;
+  const promise = buildShareDetail(req, warehouseId, name);
+  const entry = { promise, at: Date.now() };
+  detailCache.set(key, entry);
+  promise.then((d) => {
+    if (d.columnsError && detailCache.get(key) === entry) detailCache.delete(key);
+  }, () => { if (detailCache.get(key) === entry) detailCache.delete(key); });
+  return promise;
 }
 
 // GET /api/shares/:name?warehouseId=…
@@ -207,8 +231,8 @@ router.get('/:name', (req, res, next) => {
   try { warehouseId = requireWarehouse(req); } catch (e) { return next(e); }
   const name = req.params.name;
   budgeted(req, res, next, `share:${userKey(req)}:${warehouseId}:${name}`,
-    () => loadShareDetail(req, warehouseId, name),
-    { ttlMs: 30_000, refresh: !!req.query.refresh });
+    () => loadShareDetail(req, warehouseId, name, { refresh: !!req.query.refresh }),
+    { ttlMs: 0, refresh: !!req.query.refresh });
 });
 
 // Kept for older clients. Same payload as GET /:name.
@@ -217,8 +241,8 @@ router.get('/:name/tables', (req, res, next) => {
   try { warehouseId = requireWarehouse(req); } catch (e) { return next(e); }
   const name = req.params.name;
   budgeted(req, res, next, `share:${userKey(req)}:${warehouseId}:${name}`,
-    () => loadShareDetail(req, warehouseId, name),
-    { ttlMs: 30_000, refresh: !!req.query.refresh });
+    () => loadShareDetail(req, warehouseId, name, { refresh: !!req.query.refresh }),
+    { ttlMs: 0, refresh: !!req.query.refresh });
 });
 
 export default router;

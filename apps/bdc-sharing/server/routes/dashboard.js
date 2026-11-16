@@ -161,29 +161,31 @@ async function tier2(req, { warehouseId, days, userEmail, all }) {
   };
 }
 
+// Audit fields verified on real Delta Sharing events: response.result
+// carries deltaSharingRecipientName, deltaSharingShareName, tableFullName,
+// numRecords and scannedAddFileSize.
+const RECIPIENT_NAME_OK = /^[A-Za-z0-9_.-]+$/;
 async function tier3(warehouseId, { days, connections }) {
   if (String(process.env.BDC_USAGE_FROM_AUDIT || 'true').toLowerCase() === 'false') {
     return { available: false, reason: 'disabled', enable: { text: 'Usage KPIs are turned off (BDC_USAGE_FROM_AUDIT=false).' } };
   }
-  const ids = connections.map((c) => c.id).filter((i) => /^[A-Za-z0-9-]+$/.test(String(i || '')));
-  if (!ids.length) return { available: true, byConnection: [], byTable: [], daily: [], totals: { queries: 0, rows: 0, bytes: 0 } };
+  const names = connections.map((c) => c.name).filter((n) => RECIPIENT_NAME_OK.test(String(n || '')));
+  if (!names.length) return { available: true, byConnection: [], byShare: [], byTable: [], daily: [], totals: { queries: 0, rows: 0, bytes: 0 } };
   const spId = process.env.DATABRICKS_CLIENT_ID || '<app-sp-client-id>';
+  const r = (f) => `get_json_object(response.result, '$.${f}')`;
   let rows;
   try {
     rows = await spSqlQuery(warehouseId,
-      `SELECT CAST(event_date AS STRING) AS d, ` +
-      `get_json_object(response.result, '$.deltaSharingRecipientId') AS recipient_id, ` +
-      `get_json_object(response.result, '$.tableName') AS table_name, ` +
-      `COUNT(*) AS queries, ` +
-      `SUM(CAST(get_json_object(response.result, '$.numRecords') AS BIGINT)) AS num_records, ` +
-      `SUM(CAST(get_json_object(response.result, '$.scannedAddFileSize') AS BIGINT)) AS bytes, ` +
-      `CAST(MAX(event_time) AS STRING) AS last_read ` +
+      `SELECT CAST(event_date AS STRING) AS d, ${r('deltaSharingRecipientName')} AS connection, ` +
+      `${r('deltaSharingShareName')} AS share_name, ${r('tableFullName')} AS table_name, ` +
+      `COUNT(*) AS queries, SUM(CAST(${r('numRecords')} AS BIGINT)) AS num_records, ` +
+      `SUM(CAST(${r('scannedAddFileSize')} AS BIGINT)) AS bytes, CAST(MAX(event_time) AS STRING) AS last_read ` +
       `FROM system.access.audit ` +
       `WHERE service_name = 'unityCatalog' ` +
       `AND action_name IN ('deltaSharingQueriedTable', 'deltaSharingQueriedTableChanges') ` +
       `AND event_date >= date_sub(current_date(), :days) ` +
-      `AND get_json_object(response.result, '$.deltaSharingRecipientId') IN (${ids.map((i) => `'${i}'`).join(', ')}) ` +
-      `GROUP BY 1, 2, 3`,
+      `AND ${r('deltaSharingRecipientName')} IN (${names.map((n) => `'${n}'`).join(', ')}) ` +
+      `GROUP BY 1, 2, 3, 4`,
       [{ name: 'days', value: String(days), type: 'INT' }]);
   } catch (e) {
     return {
@@ -192,7 +194,7 @@ async function tier3(warehouseId, { days, connections }) {
       error: e.message,
       enable: {
         text: 'Optional: let the app read Delta Sharing events from the audit log to show SAP read activity. ' +
-          'The app SP can then read the whole audit table; results shown here are limited to shares the viewer can see.',
+          'The app SP can then read the whole audit table; results shown here are limited to BDC connections the viewer can see.',
         sql: [
           `GRANT USE CATALOG ON CATALOG system TO \`${spId}\``,
           `GRANT USE SCHEMA ON SCHEMA system.access TO \`${spId}\``,
@@ -201,34 +203,32 @@ async function tier3(warehouseId, { days, connections }) {
       },
     };
   }
-  const nameById = new Map(connections.map((c) => [c.id, c.name]));
-  const byConn = new Map();
-  const byTable = new Map();
-  const daily = new Map();
+  const add = (map, key, init, row) => {
+    const x = map.get(key) || { ...init, queries: 0, rows: 0, bytes: 0, lastRead: null };
+    x.queries += Number(row.queries) || 0;
+    x.rows += Number(row.num_records) || 0;
+    x.bytes += Number(row.bytes) || 0;
+    if (!x.lastRead || row.last_read > x.lastRead) x.lastRead = row.last_read;
+    map.set(key, x);
+  };
+  const byConn = new Map(); const byShare = new Map(); const byTable = new Map(); const daily = new Map();
   const totals = { queries: 0, rows: 0, bytes: 0 };
-  for (const r of rows) {
-    const conn = nameById.get(r.recipient_id) || r.recipient_id;
-    const q = Number(r.queries) || 0;
-    const n = Number(r.num_records) || 0;
-    const b = Number(r.bytes) || 0;
-    totals.queries += q; totals.rows += n; totals.bytes += b;
-    const c = byConn.get(conn) || { connection: conn, queries: 0, rows: 0, bytes: 0, lastRead: null, tables: new Set() };
-    c.queries += q; c.rows += n; c.bytes += b;
-    if (!c.lastRead || r.last_read > c.lastRead) c.lastRead = r.last_read;
-    if (r.table_name) c.tables.add(String(r.table_name).toLowerCase());
-    byConn.set(conn, c);
-    const tk = `${conn}\0${r.table_name}`;
-    const t = byTable.get(tk) || { connection: conn, table: r.table_name, queries: 0, rows: 0, bytes: 0, lastRead: null };
-    t.queries += q; t.rows += n; t.bytes += b;
-    if (!t.lastRead || r.last_read > t.lastRead) t.lastRead = r.last_read;
-    byTable.set(tk, t);
-    daily.set(r.d, (daily.get(r.d) || 0) + q);
+  for (const row of rows) {
+    totals.queries += Number(row.queries) || 0;
+    totals.rows += Number(row.num_records) || 0;
+    totals.bytes += Number(row.bytes) || 0;
+    add(byConn, row.connection, { connection: row.connection }, row);
+    add(byShare, `${row.share_name}\0${row.connection}`, { shareName: row.share_name, connection: row.connection }, row);
+    add(byTable, `${row.connection}\0${row.table_name}`, { connection: row.connection, table: row.table_name, shareName: row.share_name }, row);
+    daily.set(row.d, (daily.get(row.d) || 0) + (Number(row.queries) || 0));
   }
+  const desc = (a, b) => b.queries - a.queries;
   return {
     available: true,
     totals,
-    byConnection: Array.from(byConn.values()).map((c) => ({ ...c, tables: Array.from(c.tables) })).sort((a, b) => b.queries - a.queries),
-    byTable: Array.from(byTable.values()).sort((a, b) => b.queries - a.queries).slice(0, 20),
+    byConnection: Array.from(byConn.values()).sort(desc),
+    byShare: Array.from(byShare.values()).sort(desc),
+    byTable: Array.from(byTable.values()).sort(desc).slice(0, 20),
     daily: Array.from(daily.entries()).map(([date, queries]) => ({ date, queries })).sort((a, b) => a.date.localeCompare(b.date)),
   };
 }
@@ -253,14 +253,14 @@ async function buildDashboard(req, { warehouseId, days, all }) {
   const pendingRevokes = await getPendingRevokes(all ? null : userEmail, warehouseId).catch(() => []);
 
   const lastPub = new Map((t2.available ? t2.lastPublished : []).map((p) => [`${p.shareName}\0${p.recipientName}`, p]));
-  const usageByConn = new Map((t3.available ? t3.byConnection : []).map((c) => [c.connection, c]));
+  const usageByShare = new Map((t3.available ? t3.byShare : []).map((c) => [`${c.shareName}\0${c.connection}`, c]));
 
   const rows = [];
   for (const s of published) {
     const sm = summary.get(s.name);
     for (const c of s.bdcConnections) {
       const lp = lastPub.get(`${s.name}\0${c.name}`) || null;
-      const usage = usageByConn.get(c.name) || null;
+      const usage = usageByShare.get(`${s.name}\0${c.name}`) || null;
       rows.push({
         shareName: s.name,
         connection: c.name,
@@ -271,9 +271,8 @@ async function buildDashboard(req, { warehouseId, days, all }) {
         sourceLastAltered: sm ? sm.source_last_altered : null,
         lastPublishedAt: lp ? lp.at : null,
         lastPublishedBy: lp ? lp.by : null,
-        // Per-connection, not per-share: audit events carry the recipient
-        // and the shared table name, not the share.
-        lastReadByConnection: usage ? usage.lastRead : null,
+        lastRead: usage ? usage.lastRead : null,
+        reads: usage ? usage.queries : 0,
       });
     }
   }
@@ -287,7 +286,7 @@ async function buildDashboard(req, { warehouseId, days, all }) {
       attention.push({ kind: 'drift', shareName: r.shareName, connection: r.connection,
         text: 'A source table changed after the last publish. The schema in BDC may be out of date.', action: 'republish' });
     }
-    if (t3.available && pub && Date.now() - pub > UNUSED_AFTER_DAYS * 86400_000 && !usageByConn.get(r.connection)) {
+    if (t3.available && pub && Date.now() - pub > UNUSED_AFTER_DAYS * 86400_000 && !r.reads) {
       attention.push({ kind: 'unused', shareName: r.shareName, connection: r.connection,
         text: `Published more than ${UNUSED_AFTER_DAYS} days ago, no SAP reads in the last ${days} days.`, action: 'review' });
     }

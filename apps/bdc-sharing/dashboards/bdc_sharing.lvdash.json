@@ -45,17 +45,18 @@
       "name": "ds_published",
       "displayName": "Shares in BDC",
       "queryLines": [
+        "-- Current state from Unity Catalog. Source-table change detection lives in\n",
+        "-- the app: joining system.information_schema.tables here took minutes on a\n",
+        "-- large metastore.\n",
         "WITH grants AS (\n",
         "  SELECT share_name, recipient_name\n",
         "  FROM system.information_schema.share_recipient_privileges\n",
         "  WHERE privilege_type = 'SELECT' AND recipient_name RLIKE '(?i)bdc.*connect|connect.*bdc'\n",
         "),\n",
         "sources AS (\n",
-        "  SELECT u.share_name, COUNT(*) AS table_count, MAX(t.last_altered) AS source_last_altered\n",
-        "  FROM system.information_schema.table_share_usage u\n",
-        "  LEFT JOIN system.information_schema.tables t\n",
-        "    ON t.table_catalog = u.catalog_name AND t.table_schema = u.schema_name AND t.table_name = u.table_name\n",
-        "  GROUP BY u.share_name\n",
+        "  SELECT share_name, COUNT(*) AS table_count\n",
+        "  FROM system.information_schema.table_share_usage\n",
+        "  GROUP BY share_name\n",
         "),\n",
         "last_pub AS (\n",
         "  SELECT share_name, recipient_name, MAX(event_time) AS last_published, MAX_BY(user_email, event_time) AS last_published_by\n",
@@ -69,14 +70,14 @@
         "  s.share_owner,\n",
         "  COALESCE(src.table_count, 0) AS table_count,\n",
         "  CASE WHEN ROW_NUMBER() OVER (PARTITION BY g.share_name ORDER BY g.recipient_name) = 1 THEN COALESCE(src.table_count, 0) ELSE 0 END AS table_count_once,\n",
-        "  src.source_last_altered,\n",
+        "  s.last_altered AS share_last_altered,\n",
         "  lp.last_published,\n",
         "  lp.last_published_by,\n",
         "  CASE\n",
         "    WHEN lp.last_published IS NULL THEN 'Not published by the app'\n",
-        "    WHEN src.source_last_altered > lp.last_published THEN 'Source changed after publish'\n",
-        "    ELSE 'Up to date'\n",
-        "  END AS schema_status\n",
+        "    WHEN s.last_altered > lp.last_published THEN 'Share changed after publish'\n",
+        "    ELSE 'Published'\n",
+        "  END AS publish_status\n",
         "FROM grants g\n",
         "JOIN system.information_schema.shares s ON s.share_name = g.share_name\n",
         "LEFT JOIN sources src ON src.share_name = g.share_name\n",
@@ -88,21 +89,22 @@
       "name": "ds_reads",
       "displayName": "SAP reads (audit log)",
       "queryLines": [
+        "-- Delta Sharing reads by BDC connections. Fields verified on real events.\n",
         "SELECT\n",
         "  a.event_date,\n",
-        "  r.recipient_name AS bdc_connection,\n",
-        "  get_json_object(a.response.result, '$.tableName') AS table_name,\n",
+        "  get_json_object(a.response.result, '$.deltaSharingRecipientName') AS bdc_connection,\n",
+        "  get_json_object(a.response.result, '$.deltaSharingShareName') AS share_name,\n",
+        "  get_json_object(a.response.result, '$.tableFullName') AS table_name,\n",
         "  COUNT(*) AS queries,\n",
         "  SUM(CAST(get_json_object(a.response.result, '$.numRecords') AS BIGINT)) AS rows_read,\n",
-        "  SUM(CAST(get_json_object(a.response.result, '$.scannedAddFileSize') AS BIGINT)) AS bytes_scanned\n",
+        "  SUM(CAST(get_json_object(a.response.result, '$.scannedAddFileSize') AS BIGINT)) AS bytes_scanned,\n",
+        "  MAX(a.event_time) AS last_read\n",
         "FROM system.access.audit a\n",
-        "JOIN system.information_schema.recipients r\n",
-        "  ON r.recipient_id = get_json_object(a.response.result, '$.deltaSharingRecipientId')\n",
         "WHERE a.service_name = 'unityCatalog'\n",
         "  AND a.action_name IN ('deltaSharingQueriedTable', 'deltaSharingQueriedTableChanges')\n",
         "  AND a.event_date >= date_sub(current_date(), 180)\n",
-        "  AND r.recipient_name RLIKE '(?i)bdc.*connect|connect.*bdc'\n",
-        "GROUP BY a.event_date, r.recipient_name, get_json_object(a.response.result, '$.tableName')\n"
+        "  AND get_json_object(a.response.result, '$.deltaSharingRecipientName') RLIKE '(?i)bdc.*connect|connect.*bdc'\n",
+        "GROUP BY 1, 2, 3, 4\n"
       ]
     }
   ],
@@ -518,12 +520,12 @@
                       "expression": "`last_published_by`"
                     },
                     {
-                      "name": "source_last_altered",
-                      "expression": "`source_last_altered`"
+                      "name": "share_last_altered",
+                      "expression": "`share_last_altered`"
                     },
                     {
-                      "name": "schema_status",
-                      "expression": "`schema_status`"
+                      "name": "publish_status",
+                      "expression": "`publish_status`"
                     }
                   ],
                   "disaggregated": true
@@ -560,11 +562,11 @@
                     "displayName": "By"
                   },
                   {
-                    "fieldName": "source_last_altered",
-                    "displayName": "Source changed"
+                    "fieldName": "share_last_altered",
+                    "displayName": "Share changed"
                   },
                   {
-                    "fieldName": "schema_status",
+                    "fieldName": "publish_status",
                     "displayName": "Status"
                   }
                 ]
@@ -572,7 +574,7 @@
               "frame": {
                 "showTitle": true,
                 "title": "Shares in BDC",
-                "description": "One row per share and BDC connection. 'Source changed after publish' means the schema in BDC may be out of date: use Update in BDC in the app.",
+                "description": "One row per share and BDC connection. 'Share changed after publish' means objects were added or removed since the last publish: use Update in BDC in the app. The app's Dashboard also checks the source tables.",
                 "showDescription": true
               }
             }
@@ -756,7 +758,7 @@
               "lines": [
                 "## SAP reads\n",
                 "\n",
-                "Delta Sharing queries by BDC connections, from system.access.audit. Needs SELECT on system.access.audit for whoever runs this dashboard."
+                "Delta Sharing queries by BDC connections, from system.access.audit. Needs SELECT on system.access.audit for whoever views this page."
               ]
             }
           },
@@ -1007,6 +1009,10 @@
                   "datasetName": "ds_reads",
                   "fields": [
                     {
+                      "name": "share_name",
+                      "expression": "`share_name`"
+                    },
+                    {
                       "name": "bdc_connection",
                       "expression": "`bdc_connection`"
                     },
@@ -1027,8 +1033,8 @@
                       "expression": "SUM(`bytes_scanned`)"
                     },
                     {
-                      "name": "max(event_date)",
-                      "expression": "MAX(`event_date`)"
+                      "name": "max(last_read)",
+                      "expression": "MAX(`last_read`)"
                     }
                   ],
                   "disaggregated": false
@@ -1040,6 +1046,10 @@
               "widgetType": "table",
               "encodings": {
                 "columns": [
+                  {
+                    "fieldName": "share_name",
+                    "displayName": "Share"
+                  },
                   {
                     "fieldName": "bdc_connection",
                     "displayName": "BDC connection"
@@ -1069,14 +1079,14 @@
                     }
                   },
                   {
-                    "fieldName": "max(event_date)",
+                    "fieldName": "max(last_read)",
                     "displayName": "Last read"
                   }
                 ]
               },
               "frame": {
                 "showTitle": true,
-                "title": "Reads by table"
+                "title": "Reads by share and table"
               }
             }
           },
@@ -1196,6 +1206,19 @@
                   ],
                   "disaggregated": false
                 }
+              },
+              {
+                "name": "q_reads_share",
+                "query": {
+                  "datasetName": "ds_reads",
+                  "fields": [
+                    {
+                      "name": "share_name",
+                      "expression": "`share_name`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
               }
             ],
             "spec": {
@@ -1212,6 +1235,11 @@
                     "fieldName": "share_name",
                     "displayName": "Share",
                     "queryName": "q_pub_share"
+                  },
+                  {
+                    "fieldName": "share_name",
+                    "displayName": "Share",
+                    "queryName": "q_reads_share"
                   }
                 ]
               },

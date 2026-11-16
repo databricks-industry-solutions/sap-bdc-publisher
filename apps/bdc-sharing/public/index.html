@@ -278,10 +278,10 @@ function closePanel() {
   if (p && p.run) loadShares(true);
 }
 
-async function loadDetail() {
+async function loadDetail(refresh) {
   const p = state.panel;
   try {
-    p.detail = await api('GET', '/api/shares/' + encodeURIComponent(p.share.name) + '?warehouseId=' + encodeURIComponent(state.wh));
+    p.detail = await api('GET', '/api/shares/' + encodeURIComponent(p.share.name) + '?warehouseId=' + encodeURIComponent(state.wh) + (refresh ? '&refresh=1' : ''));
     if (state.panel !== p) return;
     renderPanel();
     if (p.connection) runPreflight();
@@ -323,6 +323,7 @@ function effectiveChecks(p) {
   if (!p.preflight) return [];
   return p.preflight.checks.map((c) => {
     if (c.id !== 'pk' || !p.detail) return c;
+    if (p.detail.columnsError || p.detail.tables.some((t) => t.columnsKnown === false)) return c;
     const missing = p.detail.tables.filter((t) => !t.hasPrimaryKey && !(p.pkSel[t.sharedAs] || []).length);
     if (!missing.length) return { ...c, status: 'ok', detail: 'Every table has a key from Unity Catalog or from your selection.' };
     return { ...c, status: 'warn', detail: missing.length + ' table(s) without a primary key: ' + missing.map((t) => t.sharedAs).join(', ') + '. BDC expects a key per entity. Pick key columns below, or publish without.' };
@@ -401,6 +402,7 @@ function renderPanel() {
   if (cs) cs.onchange = () => { p.connection = cs.value || null; p.preflight = null; renderPanel(); runPreflight(); };
   const dr = el('detail-retry'); if (dr) dr.onclick = () => { p.detailError = null; renderPanel(); loadDetail(); };
   const pr = el('preflight-retry'); if (pr) pr.onclick = () => runPreflight(true);
+  const pkr = el('pk-retry'); if (pkr) pkr.onclick = () => { p.detail = null; p.preflight = null; renderPanel(); loadDetail(true); };
   ['md-title', 'md-short', 'md-long'].forEach((id) => {
     el(id).oninput = () => { p.form.title = el('md-title').value; p.form.short = el('md-short').value; p.form.long = el('md-long').value; };
   });
@@ -439,7 +441,11 @@ function renderPreflight(p) {
 // --- Primary key picker -----------------------------------------------------
 
 function renderPkSection(p) {
-  const tables = p.detail.tables.filter((t) => !t.hasPrimaryKey);
+  if (p.detail.columnsError) {
+    return '<div class="section"><h3>Pick primary keys</h3>' +
+      errorBox('Couldn\'t read columns and keys from Unity Catalog:', { message: p.detail.columnsError, transient: true }, 'pk-retry') + '</div>';
+  }
+  const tables = p.detail.tables.filter((t) => t.columnsKnown !== false && !t.hasPrimaryKey);
   if (!tables.length) return '';
   let html = '<div class="section"><h3>Pick primary keys</h3><div class="muted" style="margin-bottom:8px">These tables have no primary key in Unity Catalog. Pick the key columns and the app adds them to the schema it sends to BDC.</div>';
   tables.forEach((t) => {
