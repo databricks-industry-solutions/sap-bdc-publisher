@@ -257,7 +257,7 @@ async function checkMigration(footer) {
         box.innerHTML = 'Added ' + (r.added || []).map(escHtml).join(', ') + '.';
       } catch (e) {
         const sql = e.payload && e.payload.sql;
-        el('migrate-msg').innerHTML = escHtml(e.message) + (sql ? '<pre class="code" style="white-space:pre-wrap">' + escHtml(sql) + '</pre>' : '');
+        el('migrate-msg').innerHTML = escHtml(e.message) + (sql ? '<pre class="code wrap">' + escHtml(sql) + '</pre>' : '');
         el('migrate-btn').disabled = false;
       }
     };
@@ -430,7 +430,7 @@ async function runAdopt() {
   const probesEl = el('wz-probes');
   const table = tableInput.value.trim();
   if (!table) {
-    msg.innerHTML = '<span style="color:var(--err)">Enter the 3-part name first.</span>';
+    msg.innerHTML = '<span class="text-err">Enter the 3-part name first.</span>';
     return;
   }
   goBtn.disabled = true;
@@ -447,15 +447,15 @@ async function runAdopt() {
     const data = await res.json().catch(() => ({}));
     renderProbeSteps(data.probes || []);
     if (!res.ok || !data.ok) {
-      msg.innerHTML = '<span style="color:var(--err)">' + escHtml(data.message || 'Adoption failed') + '</span>';
+      msg.innerHTML = '<span class="text-err">' + escHtml(data.message || 'Adoption failed') + '</span>';
       goBtn.disabled = false;
       return;
     }
-    msg.innerHTML = '<span style="color:var(--ok)">Verified. Loading activity…</span>';
+    msg.innerHTML = '<span class="text-ok">Verified. Loading activity…</span>';
     setTimeout(() => loadActivity(), 600);
   } catch (e) {
     probesEl.innerHTML = '<div class="step failed"><div><span class="icon">✕</span><span>Request failed</span></div><div class="err-detail">' + escHtml(e.message) + '</div></div>';
-    msg.innerHTML = '<span style="color:var(--err)">Network or server error.</span>';
+    msg.innerHTML = '<span class="text-err">Network or server error.</span>';
     goBtn.disabled = false;
   }
 }
@@ -499,15 +499,15 @@ async function runWizard() {
     const data = await res.json().catch(() => ({}));
     renderWizardSteps(data.steps || []);
     if (!res.ok || !data.ok) {
-      msg.innerHTML = '<span style="color:var(--err)">' + escHtml(data.message || 'Provisioning failed') + '</span>';
+      msg.innerHTML = '<span class="text-err">' + escHtml(data.message || 'Provisioning failed') + '</span>';
       goBtn.disabled = false;
       return;
     }
-    msg.innerHTML = '<span style="color:var(--ok)">Done. Loading activity…</span>';
+    msg.innerHTML = '<span class="text-ok">Done. Loading activity…</span>';
     setTimeout(() => loadActivity(), 600);
   } catch (e) {
     stepsEl.innerHTML = '<div class="step failed"><div><span class="icon">✕</span><span>Request failed</span></div><div class="err-detail">' + escHtml(e.message) + '</div></div>';
-    msg.innerHTML = '<span style="color:var(--err)">Network or server error.</span>';
+    msg.innerHTML = '<span class="text-err">Network or server error.</span>';
     goBtn.disabled = false;
   }
 }
