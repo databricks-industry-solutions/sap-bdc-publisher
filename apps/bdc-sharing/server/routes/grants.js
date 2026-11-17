@@ -5,13 +5,12 @@ import {
   describeShare,
   describeRecipient,
   showAllInShare,
-  executeStatement,
 } from '../dbx.js';
+import { applySpGrants } from '../lib/spGrants.js';
 import { getRequestUser } from '../auth.js';
 
 const router = Router();
 function norm(s) { return String(s || '').toLowerCase(); }
-function idQ(name) { return '`' + String(name).replace(/`/g, '``') + '`'; }
 
 router.get('/check', async (req, res, next) => {
   try {
@@ -60,12 +59,9 @@ router.get('/check', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Grants the app SP USE CATALOG / USE SCHEMA / SELECT on every catalog,
-// schema, and table backing the share. Required because the BDC publish job
-// runs as the SP after run-as removal — without UC access on the source,
-// csn_generator + publish_data_product fail. Runs as the user via OBO; the
-// caller must hold MANAGE / GRANT on the catalog (typically the share owner
-// already does).
+// Grants the app SP USE CATALOG / USE SCHEMA / SELECT on every source object
+// of the share. v2 runs this automatically in pre-flight; the endpoint stays
+// for manual re-runs.
 router.post('/sp-catalog', async (req, res, next) => {
   try {
     const { shareName, warehouseId } = req.body || {};
@@ -75,63 +71,21 @@ router.post('/sp-catalog', async (req, res, next) => {
     }
     const spId = process.env.DATABRICKS_CLIENT_ID;
     if (!spId) {
-      const err = new Error('DATABRICKS_CLIENT_ID is not set — cannot resolve the app service principal.');
+      const err = new Error('DATABRICKS_CLIENT_ID is not set, cannot resolve the app service principal.');
       err.status = 500; err.code = 'missing_sp_client_id'; throw err;
     }
-
     const objs = await showAllInShare(req, warehouseId, shareName);
-    const catalogs = new Set();
-    const schemas = new Set();
-    const tables = [];
-    for (const o of objs) {
-      const fullName = o.shared_object || o.name || '';
-      const parts = String(fullName).split('.');
-      if (parts.length < 3) continue;
-      const [cat, sch, tbl] = parts;
-      catalogs.add(cat);
-      schemas.add(`${cat}.${sch}`);
-      tables.push({ catalog: cat, schema: sch, table: tbl, fullName });
-    }
-
-    if (!catalogs.size) {
-      res.json({ ok: true, spId, catalogs: [], schemas: [], tables: [], results: [], note: 'Share has no UC objects to grant on.' });
+    const fullNames = objs.map((o) => o.shared_object || o.name || '').filter((n) => String(n).split('.').length === 3);
+    if (!fullNames.length) {
+      res.json({ ok: true, spId, results: [], note: 'Share has no UC objects to grant on.' });
       return;
     }
-
-    const spQ = idQ(spId);
-    const grants = [];
-    for (const cat of catalogs) {
-      grants.push({ scope: 'catalog', target: cat, sql: `GRANT USE CATALOG ON CATALOG ${idQ(cat)} TO ${spQ}` });
-    }
-    for (const sch of schemas) {
-      const [cat, schName] = sch.split('.');
-      grants.push({ scope: 'schema', target: sch, sql: `GRANT USE SCHEMA ON SCHEMA ${idQ(cat)}.${idQ(schName)} TO ${spQ}` });
-    }
-    for (const t of tables) {
-      grants.push({
-        scope: 'table',
-        target: t.fullName,
-        sql: `GRANT SELECT ON TABLE ${idQ(t.catalog)}.${idQ(t.schema)}.${idQ(t.table)} TO ${spQ}`,
-      });
-    }
-
-    const results = [];
-    for (const g of grants) {
-      try {
-        await executeStatement(req, { statement: g.sql, warehouseId });
-        results.push({ scope: g.scope, target: g.target, ok: true });
-      } catch (e) {
-        results.push({ scope: g.scope, target: g.target, ok: false, error: e.message });
-      }
-    }
-
+    const applied = await applySpGrants(req, warehouseId, spId, fullNames);
     res.json({
-      ok: results.every((r) => r.ok),
+      ok: applied.ok,
       spId,
-      catalogs: Array.from(catalogs),
-      schemas: Array.from(schemas),
-      tables: tables.map((t) => t.fullName),
-      results,
+      tables: fullNames,
+      results: applied.results.map((r) => ({ scope: r.scope, target: r.target, ok: r.ok, error: r.error, sql: r.sql })),
     });
   } catch (err) { next(err); }
 });

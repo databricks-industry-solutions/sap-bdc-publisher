@@ -2,146 +2,78 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Activity — Data Sharing</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
 <style>
-  :root {
-    --bg: #F4F6FA; --bg-elev: #FFFFFF; --bg-tile: #FFFFFF;
-    --border: #E4E7EC; --border-strong: #CFD4DC;
-    --text: #0F172A; --text-muted: #64748B; --text-dim: #94A3B8;
-    --accent: #FF3621; --accent-hover: #E5301D; --accent-dim: #FFE3DD; --accent-soft: #FFF5F2;
-    --ok: #16A34A; --ok-soft: #DCFCE7;
-    --warn: #D97706; --warn-soft: #FEF3C7;
-    --err: #DC2626; --err-soft: #FEE2E2;
-    --info: #2563EB; --info-soft: #DBEAFE;
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-    --shadow: 0 2px 6px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-    --radius-lg: 20px;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
-  body { background: radial-gradient(1200px 500px at 50% -200px, rgba(255, 54, 33, 0.05), transparent 70%), var(--bg); min-height: 100vh; }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  button { font-family: inherit; }
-
-  .app { min-height: 100vh; display: flex; flex-direction: column; }
-  .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 40px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.85); backdrop-filter: saturate(180%) blur(8px); position: sticky; top: 0; z-index: 20; }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .brand-logo { width: 36px; height: 36px; background: linear-gradient(135deg, #FF3621, #FF6B47); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 19px; box-shadow: 0 3px 10px rgba(255,54,33,0.28); }
-  .brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.015em; }
-  .brand-sub { font-size: 12px; color: var(--text-muted); margin-left: 4px; font-weight: 400; }
-  .user-badge { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 6px 10px 6px 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
-  .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #FF3621, #FF6B47); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; }
-  .user-email { color: var(--text-muted); font-size: 12px; }
-  .header-actions { display: flex; align-items: center; gap: 16px; }
-  .header-actions a { color: var(--text-muted); font-size: 13px; font-weight: 500; transition: color 0.15s; }
-  .header-actions a:hover { color: var(--text); text-decoration: none; }
-
-  .main { max-width: 1200px; margin: 0 auto; padding: 48px 40px 80px; width: 100%; }
-  .welcome h1 { font-size: 32px; font-weight: 700; margin: 0 0 12px; letter-spacing: -0.028em; }
-  .welcome p { color: var(--text-muted); margin: 0 0 32px; max-width: 760px; font-size: 14.5px; }
-
-  .panel { background: var(--bg-tile); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px 26px; box-shadow: var(--shadow-sm); }
-  .panel-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-
-  .btn { padding: 9px 16px; border: none; border-radius: 10px; font-weight: 500; font-size: 13px; cursor: pointer; transition: background 0.15s, transform 0.05s, box-shadow 0.15s; }
-  .btn:active:not(:disabled) { transform: translateY(1px); }
-  .btn.secondary { background: var(--bg-elev); color: var(--text); border: 1px solid var(--border-strong); }
-  .btn.secondary:hover:not(:disabled) { background: var(--bg); border-color: var(--text-muted); }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-  select { background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 10px; padding: 8px 36px 8px 12px; color: var(--text); font-size: 13px; outline: none; appearance: none; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
-  select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
-
-  .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .controls .label { font-size: 12.5px; color: var(--text-muted); }
-  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); cursor: pointer; user-select: none; }
-  .toggle input { accent-color: var(--accent); }
+  .controls { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+  .controls .label { font-size: 12px; color: var(--text-muted); }
+  .controls select { width: auto; min-width: 220px; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; user-select: none; }
   .toggle.hidden { display: none; }
-
-  table.activity { width: 100%; border-collapse: collapse; font-size: 13px; }
-  table.activity thead th { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; }
-  table.activity tbody td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  table.activity tbody tr:last-child td { border-bottom: none; }
   table.activity .when { white-space: nowrap; color: var(--text-muted); font-size: 12px; }
-  table.activity .mono { font-family: 'Menlo', monospace; font-size: 12px; }
+  table.activity .mono { font-family: var(--mono); font-size: 12px; }
+  .err-box { padding: 10px 12px; border: 1px solid var(--err-border); border-left: 3px solid var(--err); background: var(--err-soft); color: var(--text); border-radius: var(--radius-sm); font-size: 13px; }
+  .err-msg { color: var(--err-text); font-size: 12px; margin-top: 4px; max-width: 480px; overflow-wrap: anywhere; }
+  .empty .loading { margin-right: 6px; }
 
-  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; border: 1px solid; }
-  .pill.ok { background: var(--ok-soft); color: var(--ok); border-color: #86EFAC; }
-  .pill.err { background: var(--err-soft); color: var(--err); border-color: #FECACA; }
-  .pill.pending { background: var(--info-soft); color: var(--info); border-color: #93C5FD; }
-
-  .empty { padding: 32px; text-align: center; color: var(--text-muted); font-size: 13px; }
-  .err-box { padding: 14px; border: 1px solid #FECACA; background: #FEF2F2; color: #991B1B; border-radius: 10px; font-size: 13px; }
-  .err-msg { color: var(--err); font-size: 11.5px; margin-top: 4px; max-width: 480px; overflow-wrap: anywhere; }
-  .muted { color: var(--text-muted); font-size: 12px; }
-
-  .loading { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; border: 1px solid var(--border-strong); background: #F3F4F6; color: var(--text-muted); }
-  .badge.running { background: #ECFDF5; color: var(--ok); border-color: #86EFAC; }
-  .badge.starting { background: #FFFBEB; color: var(--warn); border-color: #FCD34D; }
-  .badge.stopped { background: #FEF2F2; color: var(--err); border-color: #FECACA; }
-
-  /* Setup wizard styles */
-  .wizard { padding: 8px 4px; }
-  .wizard h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 8px; }
-  .wizard p.lead { color: var(--text-muted); margin: 0 0 22px; max-width: 620px; font-size: 13.5px; }
-  .wizard .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; max-width: 520px; }
+  /* Setup wizard */
+  .wizard { padding: 4px 0; }
+  .wizard h2 { font-size: 16px; font-weight: 600; margin: 0 0 var(--space-1); }
+  .wizard p.lead { color: var(--text-muted); margin: 0 0 var(--space-4); max-width: 620px; }
+  .wizard .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: var(--space-4); max-width: 520px; }
   .wizard label { font-size: 12px; font-weight: 500; color: var(--text); }
   .wizard label .hint { color: var(--text-muted); font-weight: 400; margin-left: 6px; }
-  .wizard input[type="text"], .wizard select.full { background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 10px; padding: 9px 12px; color: var(--text); font-size: 13.5px; outline: none; font-family: inherit; }
-  .wizard input[type="text"]:focus, .wizard select.full:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
-  .wizard select.full { padding-right: 36px; appearance: none; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
-  .wizard .actions { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
-  .wizard .btn-primary { background: var(--accent); color: white; padding: 10px 18px; border: none; border-radius: 10px; font-weight: 500; font-size: 13.5px; cursor: pointer; }
+  .wizard .actions { margin-top: 4px; }
+  .wizard .btn-primary { display: inline-flex; align-items: center; height: var(--control-h); padding: 0 var(--space-3); background: var(--accent); color: #fff; border: 1px solid transparent; border-radius: var(--radius-sm); font-weight: 500; font-size: 13px; cursor: pointer; }
   .wizard .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
-  .wizard .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-  .wizard details.sql-preview { margin: 4px 0 18px; max-width: 760px; border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: #FAFBFD; }
-  .wizard details.sql-preview > summary { cursor: pointer; font-size: 12.5px; color: var(--text-muted); list-style: none; user-select: none; }
+  .wizard .btn-primary:disabled { background: var(--bg-hover); border-color: var(--border); color: var(--text-muted); cursor: not-allowed; }
+  .wizard details.sql-preview { margin: 4px 0 var(--space-4); max-width: 760px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; background: var(--bg-subtle); }
+  .wizard details.sql-preview > summary { list-style: none; user-select: none; }
   .wizard details.sql-preview > summary::-webkit-details-marker { display: none; }
-  .wizard details.sql-preview > summary::before { content: '▸ '; color: var(--text-dim); }
+  .wizard details.sql-preview > summary::before { content: '▸ '; }
   .wizard details.sql-preview[open] > summary::before { content: '▾ '; }
-  .wizard pre.sql { margin: 10px 0 4px; font-family: 'Menlo', monospace; font-size: 11.5px; line-height: 1.55; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
-  .wizard .steps { margin: 16px 0 4px; max-width: 600px; }
-  .wizard .step { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+  .wizard pre.sql { margin: 8px 0 4px; font-family: var(--mono); font-size: 12px; line-height: 1.5; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .wizard .steps { margin: var(--space-4) 0 4px; max-width: 600px; }
+  .wizard .step { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: var(--radius-sm); font-size: 13px; }
   .wizard .step + .step { margin-top: 4px; }
   .wizard .step.pending { color: var(--text-muted); }
-  .wizard .step.active { background: var(--info-soft); color: var(--info); }
-  .wizard .step.ok { background: var(--ok-soft); color: var(--ok); }
-  .wizard .step.skipped { background: var(--warn-soft); color: var(--warn); flex-direction: column; align-items: flex-start; }
-  .wizard .step.failed { background: var(--err-soft); color: var(--err); flex-direction: column; align-items: flex-start; }
-  .wizard .step .icon { width: 16px; display: inline-block; text-align: center; }
-  .wizard .step .err-detail { font-family: 'Menlo', monospace; font-size: 11.5px; margin-top: 4px; padding-left: 26px; overflow-wrap: anywhere; max-width: 100%; }
-  .wizard .footer-config { margin-top: 18px; font-size: 12px; color: var(--text-muted); }
-  .wizard .config-source-badge { display: inline-block; margin-left: 10px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; border: 1px solid var(--border); background: #F3F4F6; color: var(--text-muted); }
-  .wizard .small { font-size: 12.5px; max-width: 720px; margin: 4px 0 16px; }
-  .wizard-section { padding: 20px 0; border-top: 1px solid var(--border); margin-top: 16px; }
-  .wizard-section:first-of-type { border-top: none; padding-top: 6px; margin-top: 0; }
+  .wizard .step.active { background: var(--info-soft); color: var(--info-text); }
+  .wizard .step.ok { background: var(--ok-soft); color: var(--ok-text); }
+  .wizard .step.skipped { background: var(--warn-soft); color: var(--warn-text); flex-direction: column; align-items: flex-start; }
+  .wizard .step.failed { background: var(--err-soft); color: var(--err-text); flex-direction: column; align-items: flex-start; }
+  .wizard .step .icon { width: 16px; display: inline-block; text-align: center; font-weight: 700; }
+  .wizard .step .err-detail { font-family: var(--mono); font-size: 12px; margin-top: 4px; padding-left: 26px; overflow-wrap: anywhere; max-width: 100%; }
+  .wizard .footer-config { margin-top: var(--space-4); font-size: 12px; color: var(--text-muted); }
+  .wizard .config-source-badge { display: inline-flex; align-items: center; height: 18px; margin-left: 8px; padding: 0 6px; border-radius: var(--radius-sm); font-size: 11px; background: var(--bg-hover); color: var(--text-muted); }
+  .wizard .small { font-size: 12px; max-width: 720px; margin: 4px 0 var(--space-4); }
+  .wizard-section { padding: var(--space-4) 0; border-top: 1px solid var(--border); margin-top: var(--space-4); }
+  .wizard-section:first-of-type { border-top: none; padding-top: 4px; margin-top: 0; }
   .wizard-section.locked { opacity: 0.6; }
   .wizard-section.locked input, .wizard-section.locked select, .wizard-section.locked button { cursor: not-allowed; }
-  .wizard-section-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
-  .wizard-section-head h3 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.005em; }
-  .wizard-section-head .muted { font-size: 12px; color: var(--text-muted); }
-  .locked-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; border: 1px solid #FCD34D; background: var(--warn-soft); color: var(--warn); font-weight: 500; }
+  .wizard-section-head { display: flex; align-items: baseline; gap: var(--space-3); margin-bottom: 4px; flex-wrap: wrap; }
+  .wizard-section-head h3 { font-size: 14px; font-weight: 600; margin: 0; }
+  .locked-badge { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: var(--radius-sm); font-size: 11px; background: var(--warn-soft); color: var(--warn-text); font-weight: 500; }
 </style>
 </head>
 <body>
 <div class="app">
   <header class="header">
     <div class="brand">
-      <div class="brand-logo">D</div>
-      <div><div class="brand-name">Data Sharing <span class="brand-sub">Activity</span></div></div>
+      <img class="brand-logo" src="/img/databricks.svg" alt="Databricks">
+      <div><div class="brand-name">Data Sharing <span class="brand-sub">Databricks → SAP BDC</span></div></div>
     </div>
     <div class="header-actions">
-      <a href="/" title="Back to app">← Back to app</a>
-      <a href="/faq.html" title="Open FAQ">FAQ</a>
-      <a href="/docs.html" title="Open documentation" target="_blank">Documentation</a>
+      <a href="/">Publish</a>
+      <a href="/dashboard.html">Dashboard</a>
+      <a href="/activity.html" class="active">Activity</a>
+      <a href="/setup.html">Setup</a>
+      <a href="/faq.html">FAQ</a>
+      <a href="/docs.html" target="_blank">Documentation</a>
       <div id="user-badge" class="user-badge"></div>
     </div>
   </header>
@@ -149,11 +81,11 @@
   <main class="main">
     <section class="welcome">
       <h1>Activity</h1>
-      <p>Recent publish &amp; delete events. Each row is a state transition — submit, job success or failure, REVOKE — with the user, share, recipient, and a link to the underlying job run. Defaults to your own events; admins can switch to all users.</p>
+      <p>Recent publish and unpublish events. Each row is one step (submit, job result, REVOKE) with the user, share, BDC connection, and a link to the job run. Shows your own events; admins can switch to all users. For trends, see the <a href="/dashboard.html">Dashboard</a>.</p>
     </section>
 
-    <section class="panel">
-      <div class="panel-header">
+    <section class="card">
+      <div class="card-header">
         <div id="warehouse-row" class="controls">
           <span class="label">Warehouse</span>
           <select id="wh-select" disabled><option>Loading…</option></select>
@@ -176,8 +108,8 @@
 const WH_KEY = 'data-sharing:warehouseId';
 const ui = { showAll: false, workspaceHost: '', warehouseId: null };
 
-async function api(method, path) {
-  const res = await fetch(path, { method, headers: { Accept: 'application/json' }, credentials: 'include' });
+async function api(method, path, opts) {
+  const res = await fetch(path, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, credentials: 'include', ...(opts || {}) });
   const txt = await res.text();
   let data = null;
   try { data = txt ? JSON.parse(txt) : null; } catch { data = { raw: txt }; }
@@ -195,7 +127,9 @@ function pillForEvent(t) {
   if (!t) return { kind: 'pending', label: '—' };
   if (t.endsWith('_succeeded') || t === 'delete_finalized') return { kind: 'ok', label: 'Success' };
   if (t.endsWith('_failed')) return { kind: 'err', label: 'Failed' };
-  if (t === 'publish_submitted' || t === 'delete_submitted') return { kind: 'pending', label: 'Submitted' };
+  if (t.endsWith('_submitted')) return { kind: 'pending', label: 'Submitted' };
+  if (t === 'delete_revoke_pending') return { kind: 'pending', label: 'Pending' };
+  if (t === 'sp_grant_applied') return { kind: 'ok', label: 'Granted' };
   return { kind: 'pending', label: t };
 }
 function eventLabel(t) {
@@ -209,6 +143,12 @@ function eventLabel(t) {
     delete_job_failed:       'Delete job failed',
     delete_finalized:        'REVOKE applied',
     delete_finalize_failed:  'REVOKE failed',
+    delete_revoke_pending:   'REVOKE pending',
+    republish_submitted:     'Update submitted',
+    republish_job_succeeded: 'Update succeeded',
+    republish_job_failed:    'Update job failed',
+    publish_preflight_failed: 'Stopped by pre-flight',
+    sp_grant_applied:        'App SP access granted',
   };
   return map[t] || t || '—';
 }
@@ -293,8 +233,36 @@ function renderConfigFooter(table, source) {
   const sourceLabel = source === 'env' ? 'env var' : source === 'config' ? 'wizard' : '';
   footer.innerHTML =
     'Logging to <code>' + escHtml(table) + '</code>' +
-    (sourceLabel ? '<span class="config-source-badge">via ' + escHtml(sourceLabel) + '</span>' : '');
+    (sourceLabel ? '<span class="config-source-badge">via ' + escHtml(sourceLabel) + '</span>' : '') +
+    ' · <a href="/setup.html">Run the setup check</a>';
   el('activity-body').parentElement.appendChild(footer);
+  checkMigration(footer);
+}
+
+// Tables created before v2 lack the columns the Dashboard uses. The table
+// owner can add them here; the SP only has MODIFY and can't.
+async function checkMigration(footer) {
+  try {
+    const st = await api('GET', '/api/setup/activity-status?warehouseId=' + encodeURIComponent(ui.warehouseId));
+    if (!st.missingColumns || !st.missingColumns.length) return;
+    const box = document.createElement('div');
+    box.style.marginTop = '10px';
+    box.innerHTML = 'This table is missing the v2 columns <code>' + st.missingColumns.map(escHtml).join('</code>, <code>') + '</code>. ' +
+      '<button type="button" class="btn secondary" id="migrate-btn">Add columns</button> <span id="migrate-msg"></span>';
+    footer.appendChild(box);
+    el('migrate-btn').onclick = async () => {
+      el('migrate-btn').disabled = true;
+      el('migrate-msg').textContent = 'Altering table…';
+      try {
+        const r = await api('POST', '/api/setup/migrate-activity', { body: JSON.stringify({ warehouseId: ui.warehouseId }) });
+        box.innerHTML = 'Added ' + (r.added || []).map(escHtml).join(', ') + '.';
+      } catch (e) {
+        const sql = e.payload && e.payload.sql;
+        el('migrate-msg').innerHTML = escHtml(e.message) + (sql ? '<pre class="code wrap">' + escHtml(sql) + '</pre>' : '');
+        el('migrate-btn').disabled = false;
+      }
+    };
+  } catch { /* optional */ }
 }
 
 async function renderWizard() {
@@ -463,7 +431,7 @@ async function runAdopt() {
   const probesEl = el('wz-probes');
   const table = tableInput.value.trim();
   if (!table) {
-    msg.innerHTML = '<span style="color:var(--err)">Enter the 3-part name first.</span>';
+    msg.innerHTML = '<span class="text-err">Enter the 3-part name first.</span>';
     return;
   }
   goBtn.disabled = true;
@@ -480,15 +448,15 @@ async function runAdopt() {
     const data = await res.json().catch(() => ({}));
     renderProbeSteps(data.probes || []);
     if (!res.ok || !data.ok) {
-      msg.innerHTML = '<span style="color:var(--err)">' + escHtml(data.message || 'Adoption failed') + '</span>';
+      msg.innerHTML = '<span class="text-err">' + escHtml(data.message || 'Adoption failed') + '</span>';
       goBtn.disabled = false;
       return;
     }
-    msg.innerHTML = '<span style="color:var(--ok)">Verified. Loading activity…</span>';
+    msg.innerHTML = '<span class="text-ok">Verified. Loading activity…</span>';
     setTimeout(() => loadActivity(), 600);
   } catch (e) {
     probesEl.innerHTML = '<div class="step failed"><div><span class="icon">✕</span><span>Request failed</span></div><div class="err-detail">' + escHtml(e.message) + '</div></div>';
-    msg.innerHTML = '<span style="color:var(--err)">Network or server error.</span>';
+    msg.innerHTML = '<span class="text-err">Network or server error.</span>';
     goBtn.disabled = false;
   }
 }
@@ -532,15 +500,15 @@ async function runWizard() {
     const data = await res.json().catch(() => ({}));
     renderWizardSteps(data.steps || []);
     if (!res.ok || !data.ok) {
-      msg.innerHTML = '<span style="color:var(--err)">' + escHtml(data.message || 'Provisioning failed') + '</span>';
+      msg.innerHTML = '<span class="text-err">' + escHtml(data.message || 'Provisioning failed') + '</span>';
       goBtn.disabled = false;
       return;
     }
-    msg.innerHTML = '<span style="color:var(--ok)">Done. Loading activity…</span>';
+    msg.innerHTML = '<span class="text-ok">Done. Loading activity…</span>';
     setTimeout(() => loadActivity(), 600);
   } catch (e) {
     stepsEl.innerHTML = '<div class="step failed"><div><span class="icon">✕</span><span>Request failed</span></div><div class="err-detail">' + escHtml(e.message) + '</div></div>';
-    msg.innerHTML = '<span style="color:var(--err)">Network or server error.</span>';
+    msg.innerHTML = '<span class="text-err">Network or server error.</span>';
     goBtn.disabled = false;
   }
 }

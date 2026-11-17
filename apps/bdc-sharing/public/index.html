@@ -2,1268 +2,754 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Data Sharing — Databricks to SAP BDC</title>
+<title>Data Sharing: Databricks to SAP BDC</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #F4F6FA; --bg-elev: #FFFFFF; --bg-tile: #FFFFFF;
-    --border: #E4E7EC; --border-strong: #CFD4DC;
-    --text: #0F172A; --text-muted: #64748B; --text-dim: #94A3B8;
-    --accent: #FF3621; --accent-hover: #E5301D; --accent-dim: #FFE3DD; --accent-soft: #FFF5F2;
-    --ok: #16A34A; --ok-soft: #DCFCE7;
-    --warn: #D97706; --warn-soft: #FEF3C7;
-    --err: #DC2626; --err-soft: #FEE2E2;
-    --info: #2563EB; --info-soft: #DBEAFE;
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-    --shadow: 0 2px 6px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-    --shadow-lg: 0 10px 25px -8px rgba(15, 23, 42, 0.12), 0 4px 8px -4px rgba(15, 23, 42, 0.06);
-    --radius: 14px;
-    --radius-lg: 20px;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-  body { background: radial-gradient(1200px 500px at 50% -200px, rgba(255, 54, 33, 0.05), transparent 70%), var(--bg); min-height: 100vh; }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  button { font-family: inherit; }
-  .app { min-height: 100vh; display: flex; flex-direction: column; }
-
-  .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 40px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.85); backdrop-filter: saturate(180%) blur(8px); position: sticky; top: 0; z-index: 20; }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .brand-logo { width: 36px; height: 36px; background: linear-gradient(135deg, #FF3621, #FF6B47); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 19px; box-shadow: 0 3px 10px rgba(255,54,33,0.28); }
-  .brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.015em; }
-  .brand-sub { font-size: 12px; color: var(--text-muted); margin-left: 4px; font-weight: 400; }
-  .user-badge { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 6px 10px 6px 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
-  .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #FF3621, #FF6B47); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; }
-  .user-email { color: var(--text-muted); font-size: 12px; }
-  .header-actions { display: flex; align-items: center; gap: 16px; }
-  .header-actions a { color: var(--text-muted); font-size: 13px; font-weight: 500; transition: color 0.15s; }
-  .header-actions a:hover { color: var(--text); text-decoration: none; }
-  .header-actions a.nav-highlight { color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-dim); padding: 5px 12px; border-radius: 999px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s; }
-  .header-actions a.nav-highlight::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 0 rgba(255,54,33,0.45); animation: nav-pulse 2.2s ease-in-out infinite; }
-  .header-actions a.nav-highlight:hover { color: white; background: var(--accent); border-color: var(--accent); box-shadow: 0 2px 6px rgba(255,54,33,0.25); }
-  .header-actions a.nav-highlight:hover::before { background: white; box-shadow: none; animation: none; }
-  @keyframes nav-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,54,33,0.45); } 50% { box-shadow: 0 0 0 6px rgba(255,54,33,0); } }
-
-  .main { max-width: 1200px; margin: 0 auto; padding: 48px 40px 80px; width: 100%; }
-  .welcome h1 { font-size: 36px; font-weight: 700; margin: 0 0 12px; letter-spacing: -0.028em; color: var(--text); }
-  .welcome p { color: var(--text-muted); margin: 0 0 40px; max-width: 760px; font-size: 15px; }
-
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 22px; }
-  .tile { background: var(--bg-tile); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 26px; position: relative; transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s; box-shadow: var(--shadow-sm); }
-  .tile:hover:not(.disabled):not(.complete):not(.published) { transform: translateY(-1px); box-shadow: var(--shadow); }
-  .tile.active { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-dim), var(--shadow); }
-  .tile.complete { border-color: var(--ok); box-shadow: 0 0 0 3px rgba(22,163,74,0.15), var(--shadow-sm); }
-  .tile.published { border-color: var(--ok); box-shadow: 0 0 0 4px rgba(22,163,74,0.2), var(--shadow); background: linear-gradient(180deg, rgba(22,163,74,0.04), transparent 60%); }
-  .tile.disabled { opacity: 0.55; pointer-events: none; }
-  .tile-header { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
-  .tile-num { width: 32px; height: 32px; border-radius: 50%; background: #F1F5F9; border: 1px solid var(--border-strong); color: var(--text-muted); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; transition: all 0.2s; }
-  .tile.active .tile-num { background: var(--accent); border-color: var(--accent); color: white; box-shadow: 0 3px 8px rgba(255,54,33,0.3); }
-  .tile.complete .tile-num, .tile.published .tile-num { background: var(--ok); border-color: var(--ok); color: white; }
-  .tile-title { font-weight: 600; font-size: 15px; letter-spacing: -0.005em; }
-  .tile-subtitle { color: var(--text-muted); font-size: 12.5px; margin-top: 3px; }
-
-  /* Tile loading bar — thin animated accent strip while the tile is fetching */
-  .tile-loading { position: absolute; top: 0; left: 0; right: 0; height: 3px; border-top-left-radius: var(--radius-lg); border-top-right-radius: var(--radius-lg); overflow: hidden; background: transparent; pointer-events: none; }
-  .tile-loading::after { content: ''; position: absolute; top: 0; left: 0; height: 100%; width: 35%; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: tile-slide 1.2s ease-in-out infinite; border-radius: 999px; }
-  @keyframes tile-slide { 0% { left: -35%; } 100% { left: 100%; } }
-
-  select { width: 100%; background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 10px; padding: 11px 14px; color: var(--text); font-size: 13.5px; outline: none; appearance: none; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; transition: border-color 0.15s, box-shadow 0.15s; }
-  select:hover:not(:disabled) { border-color: var(--text-muted); }
-  select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
-  select:disabled { opacity: 0.6; cursor: not-allowed; background-color: var(--bg); }
-
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; background: #F3F4F6; color: var(--text-muted); border: 1px solid var(--border-strong); }
-  .badge.bdc { background: #EFF6FF; color: #1D4ED8; border-color: #93C5FD; }
-  .badge.table { background: #ECFDF5; color: var(--ok); border-color: #86EFAC; }
-  .badge.view, .badge.mv { background: #FEF2F2; color: var(--err); border-color: #FECACA; }
-  .badge.running { background: #ECFDF5; color: var(--ok); border-color: #86EFAC; }
-  .badge.stopped { background: #FEF2F2; color: var(--err); border-color: #FECACA; }
-  .badge.starting { background: #FFFBEB; color: var(--warn); border-color: #FCD34D; }
-  .badge.auth-oidc { background: #FFFBEB; color: var(--warn); border-color: #FCD34D; }
-  .badge.owner { background: #EFF6FF; color: #1D4ED8; border-color: #93C5FD; }
-
-  .objects { margin: 12px 0; padding: 0; list-style: none; max-height: 180px; overflow-y: auto; }
-  .objects li { padding: 8px 10px; border-radius: 6px; background: #F3F4F6; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
-  .objects .obj-name { font-family: 'Menlo', monospace; font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  .msg { padding: 12px 14px; border-radius: 8px; font-size: 13px; margin: 12px 0; border: 1px solid; }
-  .msg.ok { background: #ECFDF5; color: #065F46; border-color: #86EFAC; }
-  .msg.err { background: #FEF2F2; color: #991B1B; border-color: #FECACA; }
-  .msg.warn { background: #FFFBEB; color: #92400E; border-color: #FCD34D; }
-  .msg.info { background: #EFF6FF; color: #1E40AF; border-color: #93C5FD; }
-  .msg code { font-family: 'Menlo', monospace; font-size: 12px; background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; }
-  .msg ul { margin: 6px 0 0; padding-left: 18px; }
-
-  .actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
-
-  .mode-toggle { display: inline-flex; gap: 0; padding: 4px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 999px; margin-bottom: 32px; box-shadow: var(--shadow-sm); }
-  .mode-toggle button { padding: 8px 20px; border: none; border-radius: 999px; cursor: pointer; background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 500; transition: background 0.15s, color 0.15s, box-shadow 0.15s; letter-spacing: -0.005em; }
-  .mode-toggle button:hover:not(.active) { color: var(--text); }
-  .mode-toggle button.active { background: var(--accent); color: white; box-shadow: 0 2px 6px rgba(255,54,33,0.25); }
-  .btn { padding: 11px 20px; border: none; border-radius: 10px; font-weight: 500; font-size: 13.5px; cursor: pointer; transition: background 0.15s, transform 0.05s, box-shadow 0.15s; letter-spacing: -0.005em; }
-  .btn:active:not(:disabled) { transform: translateY(1px); }
-  .btn.primary { background: var(--accent); color: white; box-shadow: 0 2px 6px rgba(255,54,33,0.25); }
-  .btn.primary:hover:not(:disabled) { background: var(--accent-hover); box-shadow: 0 4px 10px rgba(255,54,33,0.32); }
-  .btn.secondary { background: var(--bg-elev); color: var(--text); border: 1px solid var(--border-strong); }
-  .btn.secondary:hover:not(:disabled) { background: var(--bg); border-color: var(--text-muted); }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
-
-  .loading { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .row { display: flex; align-items: center; gap: 10px; }
-  .muted { color: var(--text-muted); font-size: 12px; }
-  .metadata-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 14px; }
-  .metadata-grid label { font-size: 12px; color: var(--text-muted); }
-  .metadata-grid input, .metadata-grid textarea { background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 13px; font-family: inherit; width: 100%; outline: none; resize: vertical; }
-  .metadata-grid input:focus, .metadata-grid textarea:focus { border-color: var(--accent); }
-  .metadata-grid input.invalid, .metadata-grid textarea.invalid { border-color: var(--err); box-shadow: 0 0 0 3px rgba(220,38,38,0.12); }
-  .metadata-grid label .required { color: var(--err); margin-left: 2px; }
-  .metadata-grid .field-err { color: var(--err); font-size: 12px; margin-top: 4px; }
-
-  details { margin-top: 12px; }
-  summary { cursor: pointer; font-size: 12px; color: var(--text-muted); }
-  summary:hover { color: var(--text); }
-  .diag { margin-top: 32px; }
-  .diag-panel { margin-top: 12px; padding: 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; font-size: 12px; }
-  .diag-check { padding: 8px 10px; margin-bottom: 6px; border-radius: 6px; border: 1px solid var(--border); }
-  .diag-check.ok { border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.05); }
-  .diag-check.err { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.05); }
-  pre.code { background: #F3F4F6; padding: 8px 10px; border-radius: 6px; font-size: 11px; overflow-x: auto; max-height: 200px; margin: 6px 0 0; color: var(--text-muted); }
-
-  .full-width { grid-column: 1 / -1; }
-
-  /* Primary key picker */
-  .pk-table { margin: 10px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: #FAFBFC; }
-  .pk-table.missing { border-color: #FCD34D; background: #FFFBEB; }
-  .pk-table.defined { border-color: #86EFAC; background: #ECFDF5; }
-  .pk-table-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .pk-table-name { font-family: 'Menlo', monospace; font-size: 13px; font-weight: 500; }
-
-  .pk-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; min-height: 20px; }
-  .pk-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; border-radius: 999px; background: var(--accent); color: white; font-size: 12px; font-weight: 500; }
-  .pk-chip button { background: rgba(255,255,255,0.25); border: none; color: white; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
-  .pk-chip button:hover { background: rgba(255,255,255,0.4); }
-  .pk-chips-empty { color: var(--text-dim); font-size: 12px; font-style: italic; }
-
-  .pk-search { margin-top: 10px; position: relative; }
-  .pk-search input { width: 100%; background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 12px 8px 32px; color: var(--text); font-size: 13px; font-family: inherit; outline: none; }
-  .pk-search input:focus { border-color: var(--accent); }
-  .pk-search::before { content: '🔍'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; opacity: 0.6; }
-
-  .pk-list { margin-top: 8px; max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elev); }
-  .pk-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12.5px; cursor: pointer; transition: background 0.1s; }
-  .pk-item:last-child { border-bottom: none; }
-  .pk-item:hover { background: #F3F4F6; }
-  .pk-item.selected { background: #FFF5F3; color: var(--accent); font-weight: 500; }
-  .pk-item .col-name { font-family: 'Menlo', monospace; }
-  .pk-item .col-type { color: var(--text-dim); font-size: 11px; font-family: 'Menlo', monospace; }
-  .pk-item .col-check { color: var(--accent); font-weight: 700; }
-  .pk-list-footer { padding: 8px 12px; font-size: 11px; color: var(--text-muted); text-align: center; border-top: 1px solid var(--border); background: #FAFBFC; }
-  .pk-list-empty { padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px; }
-
-  /* Progress bar for publish job */
-  .progress { margin: 12px 0; }
-  .progress-bar { width: 100%; height: 8px; background: #F3F4F6; border-radius: 999px; overflow: hidden; position: relative; }
-  .progress-bar .fill { height: 100%; background: linear-gradient(90deg, var(--accent), #FF8A6B); border-radius: 999px; transition: width 0.4s ease-out; }
-  .progress-bar.indeterminate .fill { width: 35%; animation: slide 1.4s ease-in-out infinite; }
-  .progress-bar.success .fill { background: linear-gradient(90deg, var(--ok), #4ADE80); width: 100% !important; animation: none !important; }
-  .progress-bar.error .fill { background: var(--err); width: 100% !important; animation: none !important; }
-  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(285%); } }
-  .progress-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12px; color: var(--text-muted); }
-  .progress-steps { display: flex; gap: 6px; margin-top: 8px; }
-  .progress-step { flex: 1; padding: 6px 8px; border-radius: 6px; background: #F3F4F6; font-size: 11px; color: var(--text-muted); text-align: center; border: 1px solid var(--border); }
-  .progress-step.active { background: var(--accent); color: white; border-color: var(--accent); }
-  .progress-step.done { background: #ECFDF5; color: var(--ok); border-color: #86EFAC; }
-  .progress-step.failed { background: #FEF2F2; color: var(--err); border-color: #FECACA; }
-</style>
+<link rel="stylesheet" href="/app.css">
 </head>
 <body>
 <div class="app">
   <header class="header">
     <div class="brand">
-      <div class="brand-logo">D</div>
+      <img class="brand-logo" src="/img/databricks.svg" alt="Databricks">
       <div><div class="brand-name">Data Sharing <span class="brand-sub">Databricks → SAP BDC</span></div></div>
     </div>
     <div class="header-actions">
-      <a href="/activity.html" class="nav-highlight" title="Open activity log">Activity</a>
-      <a href="/faq.html" title="Open FAQ">FAQ</a>
-      <a href="/docs.html" title="Open documentation" target="_blank">Documentation</a>
+      <a href="/" class="active">Publish</a>
+      <a href="/dashboard.html">Dashboard</a>
+      <a href="/activity.html">Activity</a>
+      <a href="/setup.html">Setup</a>
+      <a href="/faq.html">FAQ</a>
+      <a href="/docs.html" target="_blank">Documentation</a>
       <div id="user-badge" class="user-badge"></div>
     </div>
   </header>
 
   <main class="main">
     <section class="welcome">
-      <h1 id="welcome-title">Welcome.</h1>
-      <p id="welcome-copy">Pick a warehouse, select a share and a BDC recipient, and publish. The dropdowns are filtered to what <em>you</em> can see in Unity Catalog (by direct grant or ownership). The <code>GRANT SELECT ON SHARE</code> runs as <em>you</em> via OBO so UC enforces ownership; the BDC SDK calls then run as the app's service principal on serverless — no workspace-admin role required. See the <a href="/faq.html">FAQ</a> for the full identity model.</p>
-      <div class="mode-toggle" role="tablist" aria-label="Mode">
-        <button id="mode-publish" type="button" class="active" role="tab" aria-selected="true">Publish</button>
-        <button id="mode-unpublish" type="button" role="tab" aria-selected="false">Delete</button>
-      </div>
+      <h1 id="welcome-title">Publish shares to SAP BDC</h1>
+      <p>Pick a share, pick a BDC connection, publish. You only see shares and connections you can access in Unity Catalog. <a href="/faq.html#how-it-works">How it works</a></p>
+      <div id="compute"></div>
     </section>
 
-    <section class="tiles">
-      <div id="tile-wh" class="tile active">
-        <div id="tile-wh-loading"></div>
-        <div class="tile-header">
-          <div class="tile-num">1</div>
-          <div><div class="tile-title">SQL Warehouse</div><div class="tile-subtitle">Used for privilege checks &amp; metadata queries</div></div>
-        </div>
-        <select id="wh-select" disabled><option>Loading warehouses…</option></select>
-        <div id="wh-message"></div>
-      </div>
-      <div id="tile-share" class="tile disabled">
-        <div id="tile-share-loading"></div>
-        <div class="tile-header">
-          <div class="tile-num">2</div>
-          <div><div class="tile-title">Pick a share</div><div class="tile-subtitle">Shares you have access to</div></div>
-        </div>
-        <select id="share-select" disabled><option>Pick a warehouse first</option></select>
-        <div id="share-message"></div>
-      </div>
-      <div id="tile-recipient" class="tile disabled">
-        <div id="tile-recipient-loading"></div>
-        <div class="tile-header">
-          <div class="tile-num">3</div>
-          <div><div class="tile-title">Pick a BDC recipient</div><div id="tile-recipient-subtitle" class="tile-subtitle">Only BDC Connect recipients you have access to are shown</div></div>
-        </div>
-        <select id="recipient-select" disabled><option>Pick a share first</option></select>
-        <div id="recipient-message"></div>
-      </div>
-      <div id="tile-review" class="tile disabled full-width">
-        <div class="tile-header">
-          <div class="tile-num">4</div>
-          <div><div id="tile-review-title" class="tile-title">Review and publish</div><div id="tile-review-subtitle" class="tile-subtitle">GRANT on the share runs as you; the BDC SDK calls run as the app SP on serverless</div></div>
-        </div>
-        <div id="review-body"></div>
-      </div>
-    </section>
+    <div id="setup-banner" class="banner"></div>
+    <div id="banner" class="banner"></div>
 
+    <section class="card">
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Filter shares…" aria-label="Filter shares" />
+        <label><input type="checkbox" id="show-all" /> Include shares I don't own</label>
+        <button class="btn secondary btn-sm" id="refresh" type="button">Refresh</button>
+      </div>
+      <div id="shares-msg"></div>
+      <div id="shares"></div>
+    </section>
   </main>
 </div>
 
-<script>
-const WH_KEY = 'data-sharing:warehouseId';
-const PUBLISHED_KEY = 'data-sharing:publishedShares';
+<div id="overlay" class="overlay" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title">
+    <button class="close" id="panel-close" type="button" aria-label="Close">×</button>
+    <div id="panel-body"></div>
+  </div>
+</div>
 
-function loadPublishedShares() {
-  try {
-    const raw = localStorage.getItem(PUBLISHED_KEY);
-    return raw ? new Set(JSON.parse(raw)) : new Set();
-  } catch { return new Set(); }
-}
-function persistPublishedShares() {
-  try { localStorage.setItem(PUBLISHED_KEY, JSON.stringify(Array.from(state.publishedShares))); } catch { /* ignore */ }
-}
+<script src="/common.js"></script>
+<script>
+const { api, escHtml, errorBox, fmtDate } = window.BDC;
+const PK_PAGE_SIZE = 10;
+const SAP_HELP = 'https://help.sap.com/docs/business-data-cloud';
 
 const state = {
-  me: null, warehouseId: null,
-  mode: 'publish',        // 'publish' | 'unpublish' — driven by the welcome-section toggle
-  shares: [], recipients: [],
-  selectedShare: null, selectedRecipient: null,
-  shareDetail: null, grantCheck: null, pollTimer: null,
-  tablesPk: null,         // { tables: [{ sharedAs, fullName, columns, primaryKey, hasPrimaryKey }] }
-  userPkSelection: {},    // { sharedAs: [col1, col2, ...] }
-  pkUi: {},               // { sharedAs: { search: '', visible: 10 } }
-  publishedShares: loadPublishedShares(), // Set of share names published to BDC in this browser.
-  spGrant: { status: 'idle' }, // SP catalog-access grant state for the current share.
+  wh: null,
+  overview: null,
+  pending: [],
+  lastPub: new Map(),   // shareName -> ISO date of last successful publish
+  showAll: false,
+  search: '',
+  panel: null,
+  pollTimer: null,
 };
 
-const PK_PAGE_SIZE = 10;
-
-async function api(method, path, body) {
-  const opts = { method, headers: { Accept: 'application/json' }, credentials: 'include' };
-  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-  const res = await fetch(path, opts);
-  const txt = await res.text();
-  let data = null;
-  try { data = txt ? JSON.parse(txt) : null; } catch { data = { raw: txt }; }
-  if (!res.ok) {
-    const err = new Error((data && (data.message || data.error)) || ('HTTP ' + res.status));
-    err.payload = data; err.status = res.status; throw err;
-  }
-  return data;
-}
 function el(id) { return document.getElementById(id); }
-function setMsg(id, kind, html) { if (!html) { el(id).innerHTML = ''; return; } el(id).innerHTML = '<div class="msg ' + kind + '">' + html + '</div>'; }
-function initials(name) { return (name || '?').split(/[\s@.]+/).map(p => p[0]).slice(0, 2).join('').toUpperCase(); }
-function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
-function setMode(mode) {
-  if (mode !== 'publish' && mode !== 'unpublish') return;
-  if (state.mode === mode) return;
-  state.mode = mode;
-  el('mode-publish').classList.toggle('active', mode === 'publish');
-  el('mode-publish').setAttribute('aria-selected', mode === 'publish' ? 'true' : 'false');
-  el('mode-unpublish').classList.toggle('active', mode === 'unpublish');
-  el('mode-unpublish').setAttribute('aria-selected', mode === 'unpublish' ? 'true' : 'false');
-  el('tile-recipient-subtitle').textContent = mode === 'unpublish'
-    ? 'Recipients that already have this share'
-    : 'Only BDC Connect recipients you have access to are shown';
-  el('tile-review-title').textContent = mode === 'unpublish' ? 'Review and delete' : 'Review and publish';
-  el('tile-review-subtitle').textContent = mode === 'unpublish'
-    ? 'BDC delete_share runs as the app SP on serverless; the REVOKE on the share runs as you'
-    : 'GRANT on the share runs as you; the BDC SDK calls run as the app SP on serverless';
-  // Reset selections — the previous (share, recipient) pair is rarely valid in
-  // the other mode (e.g. an unpublished share has no recipients to unpublish).
-  state.selectedShare = null;
-  state.selectedRecipient = null;
-  state.shareDetail = null;
-  state.grantCheck = null;
-  state.tablesPk = null;
-  state.userPkSelection = {};
-  state.spGrant = { status: 'idle' };
-  if (state.pollTimer) { clearTimeout(state.pollTimer); state.pollTimer = null; }
-  setMsg('share-message', '', '');
-  setMsg('recipient-message', '', '');
-  // Only re-render dropdowns once a warehouse has loaded data; before that,
-  // the placeholder ("Pick a warehouse first") is the right message.
-  if (state.warehouseId) {
-    renderShareOptions();
-    renderRecipientOptions();
-  }
-  setTileState();
-  renderReview();
-}
-
-el('mode-publish').onclick = () => setMode('publish');
-el('mode-unpublish').onclick = () => setMode('unpublish');
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
 
 (async function boot() {
-
-  try {
-    state.me = await api('GET', '/api/me');
-    const name = state.me.displayName || state.me.userName || '';
-    const email = state.me.email || state.me.userName || '';
-    el('user-badge').innerHTML =
-      '<div class="user-avatar">' + escHtml(initials(name)) + '</div>' +
-      '<div><div>' + escHtml(name) + '</div><div class="user-email">' + escHtml(email) + '</div></div>';
-    el('welcome-title').textContent = 'Welcome' + (name ? (', ' + name.split(/[\s@]/)[0]) : '') + '.';
-  } catch (e) {
-    el('user-badge').innerHTML = '<span class="muted">Sign-in error</span>';
-    setMsg('wh-message', 'err', 'Could not resolve your identity: ' + escHtml(e.message));
-  }
-
-  try {
-    const w = await api('GET', '/api/warehouses');
-    const sel = el('wh-select');
-    if (!w.warehouses.length) {
-      sel.innerHTML = '<option>No warehouses visible to you</option>';
-      setMsg('wh-message', 'err', 'You do not have CAN_USE on any SQL warehouse. Ask a workspace admin to grant you access, then refresh.');
-      return;
-    }
-    const savedId = localStorage.getItem(WH_KEY);
-    const defaultId = (savedId && w.warehouses.find(x => x.id === savedId)) ? savedId : w.defaultId;
-    sel.disabled = false;
-    sel.innerHTML = w.warehouses.map(x =>
-      '<option value="' + escHtml(x.id) + '"' + (x.id === defaultId ? ' selected' : '') + '>' +
-      escHtml(x.name) + (x.size ? ' — ' + escHtml(x.size) : '') +
-      ' [' + escHtml(x.state) + ']</option>'
-    ).join('');
-    sel.onchange = () => selectWarehouse(sel.value);
-    if (defaultId) await selectWarehouse(defaultId);
-  } catch (e) {
-    setMsg('wh-message', 'err', 'Failed to list warehouses: ' + escHtml(e.message));
-  }
+  BDC.renderUserBadge('user-badge');
+  el('search').oninput = (e) => { state.search = e.target.value.toLowerCase(); renderShares(); };
+  el('show-all').onchange = (e) => { state.showAll = e.target.checked; renderShares(); };
+  el('refresh').onclick = () => loadShares(true);
+  el('panel-close').onclick = closePanel;
+  el('overlay').addEventListener('click', (e) => { if (e.target === el('overlay')) closePanel(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !el('overlay').hidden) closePanel(); });
+  el('shares').innerHTML = '<div class="empty"><span class="loading"></span> Waiting for compute…</div>';
+  BDC.mountCompute(el('compute'), onWarehouseReady);
 })();
 
-function setTileLoading(tileId, loading) {
-  const elBar = el('tile-' + tileId + '-loading');
-  if (elBar) elBar.className = loading ? 'tile-loading' : '';
+async function onWarehouseReady(id) {
+  state.wh = id;
+  // Finish any REVOKE left over from a delete whose tab was closed, then
+  // list shares. All independent; run them together.
+  await Promise.allSettled([checkSetup(), finalizePending(), loadShares(false), loadLastPublished()]);
 }
 
-function whStateBadge(stateName) {
-  return '<span class="badge ' + escHtml(String(stateName).toLowerCase()) + '">' + escHtml(stateName) + '</span>';
-}
-
-async function selectWarehouse(id) {
-  if (!id) return;
-  state.warehouseId = id;
-  localStorage.setItem(WH_KEY, id);
-  setTileLoading('wh', true);
-  setMsg('wh-message', 'info', 'Requesting warehouse start…');
+// Publishing is blocked server-side until the required setup checks pass.
+// Show that up front instead of letting the user hit it in the panel.
+async function checkSetup() {
   try {
-    const r = await api('POST', '/api/warehouses/' + encodeURIComponent(id) + '/start');
-    const name = r.name;
-
-    if (r.state === 'RUNNING') {
-      setTileLoading('wh', false);
-      setMsg('wh-message', 'ok', '<strong>' + escHtml(name) + '</strong> is ' + whStateBadge('RUNNING') + (r.started ? ' — auto-started for you.' : ''));
-      el('tile-wh').className = 'tile complete';
-      el('tile-share').className = 'tile active';
-      await loadSharesAndRecipients();
-      return;
-    }
-
-    // Not RUNNING yet → poll every 2s and update the message live.
-    setMsg('wh-message', 'info', '<strong>' + escHtml(name) + '</strong> is ' + whStateBadge(r.state) + ' — waiting for it to be ready…');
-
-    const deadline = Date.now() + 180_000;
-    while (Date.now() < deadline) {
-      await new Promise((res) => setTimeout(res, 2000));
-      let cur;
-      try { cur = await api('GET', '/api/warehouses/' + encodeURIComponent(id)); }
-      catch (e) {
-        setMsg('wh-message', 'err', 'State poll failed: ' + escHtml(e.message));
-        setTileLoading('wh', false);
-        return;
-      }
-      setMsg('wh-message', 'info', '<strong>' + escHtml(name) + '</strong> is ' + whStateBadge(cur.state) + ' — waiting for it to be ready…');
-      if (cur.state === 'RUNNING') {
-        setTileLoading('wh', false);
-        setMsg('wh-message', 'ok', '<strong>' + escHtml(name) + '</strong> is ' + whStateBadge('RUNNING') + (r.started ? ' — auto-started for you.' : ''));
-        el('tile-wh').className = 'tile complete';
-        el('tile-share').className = 'tile active';
-        await loadSharesAndRecipients();
-        return;
-      }
-      if (cur.state === 'STOPPED' || cur.state === 'STOPPING' || cur.state === 'DELETED') {
-        setTileLoading('wh', false);
-        setMsg('wh-message', 'err', 'Warehouse entered state ' + escHtml(cur.state) + ' before it could be used. Pick another warehouse or try again.');
-        return;
-      }
-    }
-    setTileLoading('wh', false);
-    setMsg('wh-message', 'warn', 'Warehouse is taking longer than expected to start. Try refreshing.');
+    const r = await api('GET', '/api/setup/readiness?warehouseId=' + encodeURIComponent(state.wh));
+    state.setup = r;
+    const failed = r.checks.filter((c) => c.level === 'required' && c.status !== 'ok');
+    const html = failed.length
+      ? '<div class="msg ' + (r.enforced ? 'err' : 'warn') + '"><strong>' + (r.enforced ? 'Finish setup before publishing.' : 'Setup incomplete.') + '</strong> ' +
+        failed.map((c) => escHtml(c.label) + ': ' + escHtml(c.detail)).join(' ') +
+        ' <a class="btn secondary btn-sm" href="/setup.html">Open Setup</a></div>'
+      : '';
+    el('setup-banner').innerHTML = html;
+    if (state.overview) renderShares();
   } catch (e) {
-    setTileLoading('wh', false);
-    setMsg('wh-message', 'err', 'Could not start warehouse: ' + escHtml(e.message));
+    el('setup-banner').innerHTML = errorBox('Could not check setup:', e);
   }
 }
 
-async function loadSharesAndRecipients() {
-  el('share-select').disabled = true;
-  el('share-select').innerHTML = '<option>Loading shares…</option>';
-  el('recipient-select').innerHTML = '<option>Loading recipients…</option>';
-  setTileLoading('share', true);
-  setTileLoading('recipient', true);
-  setMsg('share-message', '', '');
-  setMsg('recipient-message', '', '');
-
-  // Kick off both independently so each tile's loading bar stops as soon as
-  // its own request finishes.
-  const sharesPromise = api('GET', '/api/shares?warehouseId=' + encodeURIComponent(state.warehouseId))
-    .then((s) => {
-      state.shares = s.shares || [];
-      if (s.note) setMsg('share-message', 'warn', escHtml(s.note));
-      else if (s.counts) setMsg('share-message', 'info', 'Showing ' + s.counts.accessible + ' of ' + s.counts.total + ' shares you have access to.');
-      renderShareOptions();
-    })
-    .catch((e) => {
-      el('share-select').innerHTML = '<option>—</option>';
-      setMsg('share-message', 'err', 'Failed to list shares: ' + escHtml(e.message));
-    })
-    .finally(() => setTileLoading('share', false));
-
-  const recipientsPromise = api('GET', '/api/recipients?warehouseId=' + encodeURIComponent(state.warehouseId))
-    .then((r) => {
-      state.recipients = r.recipients || [];
-      if (r.note) setMsg('recipient-message', 'warn', escHtml(r.note));
-      else if (r.counts) setMsg('recipient-message', 'info', 'Showing ' + r.counts.bdc + ' of ' + r.counts.total + ' BDC Connect recipients you have access to.');
-    })
-    .catch((e) => {
-      setMsg('recipient-message', 'err', 'Failed to list recipients: ' + escHtml(e.message));
-    })
-    .finally(() => setTileLoading('recipient', false));
-
-  await Promise.allSettled([sharesPromise, recipientsPromise]);
+function setupBlocked() {
+  const r = state.setup;
+  return !!(r && r.enforced && !r.ready);
 }
 
-function renderShareOptions() {
-  const sel = el('share-select');
-  sel.innerHTML = '';
-  if (!state.shares.length) {
-    sel.innerHTML = '<option value="">No shares you have access to</option>';
-    sel.disabled = true;
-    return;
-  }
-  if (state.mode === 'unpublish') {
-    const published = state.shares.filter((s) => (s.publishedRecipients || []).length > 0);
-    if (!published.length) {
-      sel.innerHTML = '<option value="">No shares are currently published to a BDC recipient</option>';
-      sel.disabled = true;
-      return;
+async function finalizePending() {
+  try {
+    const p = await api('GET', '/api/unpublish/pending?warehouseId=' + encodeURIComponent(state.wh));
+    state.pending = p.pending || [];
+    if (!state.pending.length) return;
+    renderBanner('<div class="msg info"><span class="loading"></span> Finishing ' + state.pending.length + ' removal(s) from an earlier session…</div>');
+    const r = await api('POST', '/api/unpublish/finalize-pending', { warehouseId: state.wh });
+    const done = (r.results || []).filter((x) => x.ok);
+    const failed = (r.results || []).filter((x) => !x.ok);
+    let html = '';
+    if (done.length) {
+      html += '<div class="msg ok"><strong>Finished ' + done.length + ' removal(s).</strong> The SELECT grant was revoked for: ' +
+        done.map((d) => '<code>' + escHtml(d.shareName) + '</code> → <code>' + escHtml(d.recipientName) + '</code>').join(', ') + '.</div>';
     }
-    sel.disabled = false;
-    sel.innerHTML = '<option value="">— Select a share —</option>' + published.map((s) => {
-      const recs = s.publishedRecipients || [];
-      const title = 'Published to: ' + recs.join(', ');
-      return '<option value="' + escHtml(s.name) + '" title="' + escHtml(title) + '">' +
-        escHtml(s.name) + ' — Published to ' + recs.length + ' BDC recipient' + (recs.length > 1 ? 's' : '') +
-        '</option>';
-    }).join('');
-    sel.onchange = () => selectShare(sel.value || null);
+    if (failed.length) {
+      html += '<div class="msg err"><strong>' + failed.length + ' removal(s) still need a REVOKE.</strong> BDC no longer lists them, but the grant is still in place.<ul>' +
+        failed.map((f) => '<li><code>' + escHtml(f.shareName) + '</code> → <code>' + escHtml(f.recipientName) + '</code>: ' + escHtml(f.error) + '</li>').join('') +
+        '</ul><button class="btn secondary btn-sm" id="retry-revoke" type="button">Retry</button></div>';
+    }
+    state.pending = failed.map((f) => ({ shareName: f.shareName, recipientName: f.recipientName }));
+    renderBanner(html);
+    const b = el('retry-revoke'); if (b) b.onclick = finalizePending;
+    if (done.length) loadShares(true);
+  } catch (e) {
+    renderBanner(errorBox('Could not finish earlier removals:', e, 'retry-revoke'));
+    const b = el('retry-revoke'); if (b) b.onclick = finalizePending;
+  }
+}
+
+function renderBanner(html) { el('banner').innerHTML = html || ''; }
+
+async function loadShares(refresh) {
+  el('shares-msg').innerHTML = '';
+  if (!state.overview) el('shares').innerHTML = '<div class="empty"><span class="loading"></span> Loading shares…</div>';
+  else el('refresh').disabled = true;
+  try {
+    state.overview = await api('GET', '/api/shares?warehouseId=' + encodeURIComponent(state.wh) + (refresh ? '&refresh=1' : ''));
+    renderShares();
+    openFromUrl();
+  } catch (e) {
+    el('shares-msg').innerHTML = errorBox('Could not list shares:', e, 'shares-retry');
+    el('shares-retry').onclick = () => loadShares(true);
+    if (!state.overview) el('shares').innerHTML = '';
+  } finally {
+    el('refresh').disabled = false;
+  }
+}
+
+async function loadLastPublished() {
+  try {
+    const r = await api('GET', '/api/activity/last-published?warehouseId=' + encodeURIComponent(state.wh));
+    state.lastPub = new Map((r.shares || []).map((x) => [x.shareName, x.at]));
+    if (state.overview) renderShares();
+  } catch { /* optional column */ }
+}
+
+// ---------------------------------------------------------------------------
+// Shares table
+// ---------------------------------------------------------------------------
+
+function pendingFor(shareName) {
+  return state.pending.filter((p) => p.shareName === shareName);
+}
+
+function renderShares() {
+  const ov = state.overview;
+  if (!ov) return;
+  const conns = ov.connections || [];
+  const visible = ov.shares.filter((s) => (state.showAll || s.isOwner) &&
+    (!state.search || s.name.toLowerCase().includes(state.search) || String(s.comment || '').toLowerCase().includes(state.search)));
+
+  const notes = [];
+  if (!conns.length) {
+    notes.push('<div class="msg warn">No BDC connections are visible to you. In SAP BDC, a connection to this workspace creates a Delta Sharing recipient (named <code>bdc-connect-…</code>). Ask the recipient owner to give you <code>USE RECIPIENT</code>, or see the <a href="/faq.html#connections">FAQ</a>.</div>');
+  }
+  if (ov.source === 'show_commands') {
+    notes.push('<div class="msg info">information_schema was not readable on this warehouse, so the app fell back to slower SHOW commands.</div>');
+  }
+  const hiddenNotOwned = ov.shares.filter((s) => !s.isOwner).length;
+  if (!state.showAll && hiddenNotOwned) {
+    notes.push('<div class="muted mb-2">' + hiddenNotOwned + ' share(s) you don\'t own are hidden. Publishing those needs <code>USE SHARE</code> and <code>SET SHARE PERMISSION</code>.</div>');
+  }
+  el('shares-msg').innerHTML = notes.join('');
+
+  if (!visible.length) {
+    el('shares').innerHTML = '<div class="empty">' + (ov.shares.length ? 'No shares match the filter.' : 'No shares are visible to you. Create a share in Catalog Explorer first.') + '</div>';
     return;
   }
-  const totalBdc = state.recipients.length;
-  sel.disabled = false;
-  sel.innerHTML = '<option value="">— Select a share —</option>' + state.shares.map(s => {
-    const pub = (s.publishedRecipients || []).length;
-    const fullyPublished = totalBdc > 0 && pub >= totalBdc;
-    const partiallyPublished = pub > 0 && pub < totalBdc;
-    const prefix = fullyPublished ? '✓ ' : '';
-    let stateSuffix = '';
-    if (fullyPublished) stateSuffix = ' — Published to all ' + totalBdc + ' BDC recipient' + (totalBdc > 1 ? 's' : '');
-    else if (partiallyPublished) stateSuffix = ' — Published to ' + pub + ' of ' + totalBdc + ' BDC recipients';
-    const title = pub > 0 ? 'Published to: ' + (s.publishedRecipients || []).join(', ') : '';
-    const attrs = (fullyPublished ? ' disabled' : '') + (title ? ' title="' + escHtml(title) + '"' : '');
-    return '<option value="' + escHtml(s.name) + '"' + attrs + '>' +
-      prefix + escHtml(s.name) + stateSuffix + '</option>';
+
+  const rows = visible.map((s) => {
+    const pend = pendingFor(s.name);
+    const connsHtml = s.bdcConnections.length
+      ? s.bdcConnections.map((c) =>
+          '<div class="conn"><code title="' + escHtml(c.name) + '">' + escHtml(shortConn(c.name)) + '</code>' +
+          '<button class="btn link btn-sm" data-act="republish" data-share="' + escHtml(s.name) + '" data-conn="' + escHtml(c.name) + '" type="button">Update in BDC</button>' +
+          '<button class="btn link btn-sm" data-act="unpublish" data-share="' + escHtml(s.name) + '" data-conn="' + escHtml(c.name) + '" type="button">Unpublish</button>' +
+          '</div>').join('')
+      : '<span class="muted">—</span>';
+    let status = '<span class="status">Not in BDC</span>';
+    if (pend.length) status = '<span class="status pending">Revoke pending</span> <button class="btn link btn-sm" data-act="finish" type="button">Finish</button>';
+    else if (s.bdcConnections.length) status = '<span class="status in-bdc">In BDC</span>';
+    const unpublishedConns = conns.filter((c) => !s.bdcConnections.some((b) => b.name === c.name));
+    const publishBtn = unpublishedConns.length
+      ? '<button class="btn ' + (s.isOwner ? 'primary' : 'secondary') + ' btn-sm" data-act="publish" data-share="' + escHtml(s.name) + '" type="button">Publish…</button>'
+      : '';
+    return '<tr>' +
+      '<td><div class="share-name">' + escHtml(s.name) + '</div>' +
+        '<div class="muted">' + (s.isOwner ? 'You own this' : 'Owner: ' + escHtml(s.owner || '?')) + (s.comment ? ' · ' + escHtml(s.comment) : '') + '</div></td>' +
+      '<td class="num">' + (s.tableCount == null ? '—' : escHtml(s.tableCount)) + '</td>' +
+      '<td>' + connsHtml + '</td>' +
+      '<td>' + fmtDate(state.lastPub.get(s.name)) + '</td>' +
+      '<td>' + status + '</td>' +
+      '<td class="actions-cell">' + publishBtn + '</td>' +
+      '</tr>';
   }).join('');
-  sel.onchange = () => selectShare(sel.value || null);
-}
 
-function renderRecipientOptions() {
-  const sel = el('recipient-select');
-  if (!state.recipients.length) {
-    sel.innerHTML = '<option value="">No recipients you have access to</option>';
-    sel.disabled = true;
-    return;
-  }
-  // Already-published recipients for the currently selected share (if any).
-  const currentShare = state.shares.find((s) => s.name === state.selectedShare);
-  const alreadyPublished = new Set((currentShare && currentShare.publishedRecipients) || []);
+  el('shares').innerHTML =
+    '<table class="grid"><thead><tr><th>Share</th><th class="num">Tables</th><th>BDC connections</th><th>Last published</th><th>Status</th><th></th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>' +
+    '<div class="muted mt-3">' + visible.length + ' of ' + ov.shares.length + ' share(s) · ' + conns.length + ' BDC connection(s)' +
+    (ov.cachedAgeMs != null ? ' · loaded ' + Math.round(ov.cachedAgeMs / 1000) + 's ago' : '') + '</div>';
 
-  if (state.mode === 'unpublish') {
-    if (!state.selectedShare) {
-      sel.innerHTML = '<option value="">Pick a share first</option>';
-      sel.disabled = true;
-      return;
-    }
-    const candidates = state.recipients.filter((r) => alreadyPublished.has(r.name));
-    if (!candidates.length) {
-      sel.innerHTML = '<option value="">This share has no BDC recipients to remove</option>';
-      sel.disabled = true;
-      return;
-    }
-    sel.disabled = false;
-    const opts = ['<option value="">— Select a recipient to remove —</option>'];
-    candidates.forEach((r) => {
-      opts.push('<option value="' + escHtml(r.name) + '">' + escHtml(r.name) + '</option>');
-    });
-    sel.innerHTML = opts.join('');
-    sel.onchange = () => selectRecipient(sel.value || null);
-    return;
-  }
-
-  const bdc = state.recipients.filter(r => r.looksLikeBdc);
-  const other = state.recipients.filter(r => !r.looksLikeBdc);
-  const opts = ['<option value="">— Select a recipient —</option>'];
-
-  if (bdc.length) {
-    opts.push('<optgroup label="BDC recipients">');
-    bdc.forEach(r => {
-      const taken = alreadyPublished.has(r.name);
-      const prefix = taken ? '✓ ' : '';
-      const suffix = taken ? ' — already on share, will (re)publish to BDC' : '';
-      const attrs = (taken ? ' title="Recipient already has the SELECT grant; publishing will (re)create the data product in BDC"' : '');
-      opts.push('<option value="' + escHtml(r.name) + '"' + attrs + '>' + prefix + escHtml(r.name) + suffix + '</option>');
-    });
-    opts.push('</optgroup>');
-  }
-  if (other.length) {
-    opts.push('<optgroup label="Other recipients">');
-    other.forEach(r => opts.push('<option value="' + escHtml(r.name) + '">' + escHtml(r.name) + ' [' + escHtml(r.authenticationType || '') + ']</option>'));
-    opts.push('</optgroup>');
-  }
-  sel.innerHTML = opts.join('');
-  sel.disabled = false;
-  sel.onchange = () => selectRecipient(sel.value || null);
-}
-
-function setTileState() {
-  el('tile-share').className = 'tile ' + (!state.warehouseId ? 'disabled' : (state.selectedShare ? 'complete' : 'active'));
-  el('tile-recipient').className = 'tile ' + (!state.selectedShare ? 'disabled' : (state.selectedRecipient ? 'complete' : 'active'));
-  el('tile-review').className = 'tile full-width ' + (!state.selectedShare || !state.selectedRecipient ? 'disabled' : 'active');
-}
-
-async function selectShare(name) {
-  state.selectedShare = name;
-  state.selectedRecipient = null;
-  state.shareDetail = null;
-  state.grantCheck = null;
-  state.tablesPk = null;
-  state.userPkSelection = {};
-  state.spGrant = { status: 'idle' };
-  setMsg('recipient-message', '', '');
-  el('recipient-select').innerHTML = '<option>Loading recipients…</option>';
-  if (!name) { setTileState(); renderReview(); return; }
-  // Recipient list depends on the selected share's publishedRecipients, so
-  // re-render now.
-  renderRecipientOptions();
-  setTileState(); renderReview();
-  try {
-    const [detail, tablesPk] = await Promise.all([
-      api('GET', '/api/shares/' + encodeURIComponent(name) + '?warehouseId=' + encodeURIComponent(state.warehouseId)),
-      api('GET', '/api/shares/' + encodeURIComponent(name) + '/tables?warehouseId=' + encodeURIComponent(state.warehouseId)).catch(() => null),
-    ]);
-    state.shareDetail = detail;
-    state.tablesPk = tablesPk;
-    renderReview();
-  } catch (e) { setMsg('share-message', 'err', 'Could not fetch share detail: ' + escHtml(e.message)); }
-}
-
-async function selectRecipient(name) {
-  state.selectedRecipient = name;
-  state.grantCheck = null;
-  setTileState(); renderReview();
-  if (!name || !state.selectedShare) return;
-  try {
-    state.grantCheck = await api('GET',
-      '/api/grants/check?warehouseId=' + encodeURIComponent(state.warehouseId) +
-      '&share=' + encodeURIComponent(state.selectedShare) +
-      '&recipient=' + encodeURIComponent(name));
-    renderReview();
-  } catch (e) { setMsg('recipient-message', 'err', 'Could not run privilege check: ' + escHtml(e.message)); }
-}
-
-function objectTypeBadge(t) {
-  const u = String(t || '').toUpperCase();
-  if (u === 'TABLE') return '<span class="badge table">TABLE</span>';
-  if (u === 'VIEW') return '<span class="badge view">VIEW</span>';
-  if (u === 'MATERIALIZED_VIEW') return '<span class="badge mv">MATERIALIZED VIEW</span>';
-  return '<span class="badge">' + escHtml(u || 'UNKNOWN') + '</span>';
-}
-
-function analyzeObjects(detail) {
-  const counts = { TABLE: 0, VIEW: 0, MATERIALIZED_VIEW: 0, OTHER: 0 };
-  const unsupported = [];
-  (detail && detail.objects || []).forEach(o => {
-    const t = String(o.dataObjectType || '').toUpperCase();
-    if (counts[t] != null) counts[t]++; else counts.OTHER++;
-    if (t === 'VIEW' || t === 'MATERIALIZED_VIEW') unsupported.push(o);
-  });
-  return { counts, unsupported };
-}
-
-function renderReview() {
-  const body = el('review-body');
-  if (!state.selectedShare || !state.selectedRecipient) {
-    body.innerHTML = '<div class="muted">Pick a share and recipient to continue.</div>'; return;
-  }
-  if (state.mode === 'unpublish') {
-    body.innerHTML =
-      '<div class="msg warn">' +
-        '<strong>You are about to delete:</strong> ' +
-        '<code>' + escHtml(state.selectedShare) + '</code> from <code>' + escHtml(state.selectedRecipient) + '</code>.<br>' +
-        'This calls <code>delete_share</code> on the BDC side — removing the catalog entry, ORD descriptor, ' +
-        'and CSN schema, and revoking BDC-side recipient access — then runs <code>REVOKE SELECT ON SHARE</code> ' +
-        'on the Databricks side. The Databricks share itself is preserved.' +
-      '</div>' +
-      '<div class="actions"><button id="btn-unpublish" class="btn primary">Delete from BDC</button></div>' +
-      '<div id="run-result"></div>';
-    el('btn-unpublish').onclick = runUnpublish;
-    return;
-  }
-  const detail = state.shareDetail;
-  const rec = state.recipients.find(r => r.name === state.selectedRecipient);
-  const gc = state.grantCheck;
-
-  let objectsHtml = ''; let unsupportedError = ''; let analysis = null;
-  if (detail) {
-    analysis = analyzeObjects(detail);
-    if (analysis.unsupported.length) {
-      unsupportedError = '<div class="msg err"><strong>Not supported by BDC Connect (current version):</strong> the share contains ' +
-        analysis.unsupported.length + ' object(s) of type VIEW or MATERIALIZED_VIEW. Remove them or pick a different share.<ul>' +
-        analysis.unsupported.map(o => '<li><code>' + escHtml(o.name) + '</code> — ' + objectTypeBadge(o.dataObjectType) + '</li>').join('') +
-        '</ul></div>';
-    }
-    objectsHtml = '<div class="muted" style="margin-top:8px">Objects in share:</div><ul class="objects">' +
-      (detail.objects || []).map(o => '<li><span class="obj-name">' + escHtml(o.name) + '</span>' + objectTypeBadge(o.dataObjectType) + '</li>').join('') + '</ul>';
-  } else {
-    objectsHtml = '<div class="muted"><span class="loading"></span> Loading share detail…</div>';
-  }
-
-  let grantHtml = '';
-  if (gc) {
-    const sOK = gc.share.isOwner || gc.share.privileges.length > 0;
-    const rOK = gc.recipient.isOwner || gc.recipient.privileges.length > 0;
-    if (sOK && rOK) {
-      grantHtml = '<div class="msg ok">You have direct access on both securables. (Group-based grants aren\'t detected here — the publish job is authoritative.)</div>';
-    } else {
-      grantHtml = '<div class="msg warn">Direct grants not detected — you may still succeed via group-based grants. The publish job runs as you and will enforce permissions.</div>';
-    }
-    grantHtml += '<details><summary>Show privilege check details</summary>' +
-      '<dl style="display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;font-size:12px;margin-top:8px">' +
-      '<dt class="muted">Share owner</dt><dd>' + escHtml(gc.share.owner || '?') + (gc.share.isOwner ? ' (you)' : '') + '</dd>' +
-      '<dt class="muted">Your share grants</dt><dd>' + (gc.share.privileges.length ? gc.share.privileges.map(escHtml).join(', ') : '<em>none (direct)</em>') + '</dd>' +
-      '<dt class="muted">Recipient owner</dt><dd>' + escHtml(gc.recipient.owner || '?') + (gc.recipient.isOwner ? ' (you)' : '') + '</dd>' +
-      '<dt class="muted">Your recipient grants</dt><dd>' + (gc.recipient.privileges.length ? gc.recipient.privileges.map(escHtml).join(', ') : '<em>none (direct)</em>') + '</dd>' +
-      '</dl></details>';
-  } else {
-    grantHtml = '<div class="muted"><span class="loading"></span> Checking your privileges…</div>';
-  }
-
-  let recHtml = '';
-  if (rec) {
-    recHtml = '<div class="row" style="margin-top:8px;flex-wrap:wrap">' +
-      (rec.looksLikeBdc ? '<span class="badge bdc">BDC</span>' : '') +
-      (rec.authenticationType ? '<span class="badge auth-oidc">' + escHtml(rec.authenticationType) + '</span>' : '') +
-      (rec.isOwner ? '<span class="badge owner">you own</span>' : '') +
-      '<span class="muted">' + escHtml(rec.name) + '</span></div>';
-  }
-
-  // SP catalog access — the publish Job runs as the SP, so the SP needs UC
-  // access on the share's source tables for csn_generator + publish to work.
-  const spGrantHtml = renderSpCatalogSection();
-
-  // Primary key picker (optional — publish proceeds with or without).
-  const pkHtml = renderPrimaryKeySection();
-
-  // The chosen (share, recipient) pair may already hold the SELECT grant. That
-  // grant is only half of a publish; the BDC SDK job still has to run to make
-  // the data product live. So we allow re-publishing: the GRANT is idempotent
-  // (no-op when already granted) and the job (re)creates the product in BDC.
-  const currentShare = state.shares.find((s) => s.name === state.selectedShare);
-  const alreadyPublishedHere = !!(currentShare && (currentShare.publishedRecipients || []).includes(state.selectedRecipient));
-  const alreadyPublishedMsg = alreadyPublishedHere
-    ? '<div class="msg info"><strong>Recipient already on share.</strong> <code>' + escHtml(state.selectedShare) + '</code> already grants <code>SELECT</code> to <code>' + escHtml(state.selectedRecipient) + '</code>. The grant step is a no-op; the BDC publish job will run to (re)publish the data product.</div>'
-    : '';
-
-  // Heads-up that BDC may need a manual sync before the product shows up.
-  const bdcSyncMsg = '<div class="msg info">After publishing, the data product can take a few minutes to appear in SAP BDC. If it doesn\'t show up, trigger a metadata extraction for the BDC Connect connection to sync it.</div>';
-
-  const blockedByObjects = analysis && analysis.unsupported.length > 0;
-  const blockedByDetail = !detail;
-  const canRun = !blockedByObjects && !blockedByDetail;
-
-  body.innerHTML = recHtml + objectsHtml + unsupportedError + grantHtml + spGrantHtml + alreadyPublishedMsg + bdcSyncMsg + pkHtml +
-    '<div class="metadata-grid">' +
-    '<div><label>Data product title</label><input id="md-title" value="' + escHtml(state.selectedShare) + '" /></div>' +
-    '<div><label>Short description <span class="required" title="Required">*</span></label>' +
-    '<input id="md-short" required placeholder="A brief summary (must not contain the title)" />' +
-    '<div id="md-short-err" class="field-err" hidden></div></div>' +
-    '<div><label>Long description</label><textarea id="md-long" rows="2">' + escHtml('Published from Data Sharing app: ' + state.selectedShare) + '</textarea></div>' +
-    '</div>' +
-    '<div class="actions">' +
-    '<button id="btn-publish" class="btn primary" ' + (canRun ? '' : 'disabled') + '>Grant &amp; publish to BDC</button>' +
-    '</div>' +
-    '<div id="run-result"></div>';
-
-  if (canRun) el('btn-publish').onclick = runPublish;
-  wireSpCatalogListeners();
-  wirePrimaryKeyListeners();
-}
-
-function spCatalogScope() {
-  const tables = (state.tablesPk && state.tablesPk.tables) || [];
-  const catalogs = new Set();
-  const schemas = new Set();
-  for (const t of tables) {
-    const parts = String(t.fullName || '').split('.');
-    if (parts.length < 3) continue;
-    catalogs.add(parts[0]);
-    schemas.add(parts[0] + '.' + parts[1]);
-  }
-  return {
-    catalogs: Array.from(catalogs),
-    schemas: Array.from(schemas),
-    tableCount: tables.length,
-  };
-}
-
-function renderSpCatalogSection() {
-  const scope = spCatalogScope();
-  if (!scope.tableCount) return '';
-  const sg = state.spGrant || { status: 'idle' };
-
-  let statusHtml = '';
-  if (sg.status === 'granting') {
-    statusHtml = '<div class="msg info"><span class="loading"></span> Granting…</div>';
-  } else if (sg.status === 'success') {
-    statusHtml = '<div class="msg ok"><strong>Done.</strong> Granted USE CATALOG / USE SCHEMA / SELECT to the app SP on ' +
-      sg.granted + ' object(s). The BDC publish job has the access it needs.</div>';
-  } else if (sg.status === 'partial') {
-    statusHtml = '<div class="msg warn"><strong>Some grants failed.</strong> ' +
-      sg.granted + ' of ' + sg.total + ' succeeded. Common cause: you don\'t hold MANAGE on the catalog. ' +
-      'Ask the catalog owner to run these — see details below.</div>' +
-      renderSpGrantResults(sg.results);
-  } else if (sg.status === 'error') {
-    statusHtml = '<div class="msg err"><strong>Failed:</strong> ' + escHtml(sg.message || 'unknown') + '</div>';
-  }
-
-  const catalogList = scope.catalogs.map((c) => '<code>' + escHtml(c) + '</code>').join(', ');
-  const btnLabel = sg.status === 'success' ? 'Re-run grants' : 'Grant access to SP';
-
-  return '<div class="msg info" style="margin-top:12px"><strong>App SP access to source data.</strong> ' +
-    'The BDC publish job runs as the app\'s service principal. For it to read schemas and serve the share, the SP needs ' +
-    '<code>USE CATALOG</code> / <code>USE SCHEMA</code> / <code>SELECT</code> on the share\'s source ' +
-    (scope.catalogs.length === 1 ? 'catalog: ' : 'catalogs: ') + catalogList + ' (' + scope.tableCount + ' table' +
-    (scope.tableCount === 1 ? '' : 's') + '). ' +
-    'Click below to grant — runs as <em>you</em> via OBO, so you must hold MANAGE on the catalog. Idempotent.' +
-    '</div>' +
-    '<div class="actions" style="margin-top:6px"><button id="btn-sp-grant" class="btn secondary"' +
-    (sg.status === 'granting' ? ' disabled' : '') + '>' + escHtml(btnLabel) + '</button></div>' +
-    statusHtml;
-}
-
-function renderSpGrantResults(results) {
-  if (!results || !results.length) return '';
-  const failed = results.filter((r) => !r.ok);
-  if (!failed.length) return '';
-  return '<details style="margin-top:6px"><summary>Show failed grants</summary>' +
-    '<ul class="objects" style="margin-top:6px">' +
-    failed.map((r) => '<li><span class="obj-name">' + escHtml(r.scope.toUpperCase()) + ' ' + escHtml(r.target) + '</span>' +
-      '<span class="muted" style="font-size:11px">' + escHtml(r.error || '') + '</span></li>').join('') +
-    '</ul></details>';
-}
-
-function wireSpCatalogListeners() {
-  const btn = el('btn-sp-grant');
-  if (!btn) return;
-  btn.onclick = runSpCatalogGrant;
-}
-
-async function runSpCatalogGrant() {
-  if (!state.selectedShare || !state.warehouseId) return;
-  state.spGrant = { status: 'granting' };
-  renderReview();
-  try {
-    const r = await api('POST', '/api/grants/sp-catalog', {
-      shareName: state.selectedShare,
-      warehouseId: state.warehouseId,
-    });
-    const total = (r.results || []).length;
-    const granted = (r.results || []).filter((x) => x.ok).length;
-    state.spGrant = {
-      status: r.ok ? 'success' : 'partial',
-      granted, total,
-      results: r.results || [],
+  el('shares').querySelectorAll('[data-act]').forEach((b) => {
+    if (setupBlocked() && b.getAttribute('data-act') !== 'finish') { b.disabled = true; b.title = 'Finish setup first'; return; }
+    b.onclick = () => {
+      const act = b.getAttribute('data-act');
+      if (act === 'finish') return finalizePending();
+      openPanel(act, b.getAttribute('data-share'), b.getAttribute('data-conn'));
     };
-  } catch (e) {
-    state.spGrant = { status: 'error', message: e.message };
-  }
-  renderReview();
+  });
 }
 
-function renderPrimaryKeySection() {
-  if (!state.tablesPk || !state.tablesPk.tables || !state.tablesPk.tables.length) return '';
-  const tables = state.tablesPk.tables;
-  const withoutPk = tables.filter((t) => !t.hasPrimaryKey);
-  let html = '<div style="margin-top:16px"><h4 style="margin:0 0 8px;font-size:14px;font-weight:600">Primary keys <span style="font-weight:400;color:var(--text-muted);font-size:12px">(optional)</span></h4>';
-  html += '<div class="muted" style="margin-bottom:10px">Tables with a PK in Unity Catalog are picked up automatically. For tables without one, you can optionally select PK columns below — they\'ll be annotated in the CSN schema before publish. Leave blank to publish without PK annotation.</div>';
-  if (!withoutPk.length) {
-    html += '<div class="msg ok">All ' + tables.length + ' table(s) in this share already have a primary key defined in Unity Catalog.</div>';
-  } else {
-    html += '<div class="msg info">' + withoutPk.length + ' of ' + tables.length + ' table(s) have no UC primary key. Selecting PK columns is optional.</div>';
+// Deep links from the Dashboard: /?act=republish&share=…&conn=…
+function openFromUrl() {
+  const q = new URLSearchParams(location.search);
+  const act = q.get('act'); const share = q.get('share');
+  if (!act || !share || !['publish', 'republish', 'unpublish'].includes(act)) return;
+  history.replaceState(null, '', '/');
+  const s = state.overview.shares.find((x) => x.name === share);
+  if (!s) return;
+  state.showAll = state.showAll || !s.isOwner;
+  el('show-all').checked = state.showAll;
+  renderShares();
+  openPanel(act, share, q.get('conn'));
+}
+
+function shortConn(name) {
+  return name.length > 34 ? name.slice(0, 22) + '…' + name.slice(-8) : name;
+}
+
+// ---------------------------------------------------------------------------
+// Panel: publish / update / unpublish
+// ---------------------------------------------------------------------------
+
+function openPanel(mode, shareName, connName) {
+  const share = state.overview.shares.find((s) => s.name === shareName);
+  const conns = state.overview.connections || [];
+  let connection = connName || null;
+  if (mode === 'publish' && !connection) {
+    const open = conns.filter((c) => !share.bdcConnections.some((b) => b.name === c.name));
+    if (open.length === 1) connection = open[0].name;
   }
-  tables.forEach((t) => {
-    const sel = state.userPkSelection[t.sharedAs] || [];
-    const hasDefined = t.hasPrimaryKey;
-    const cls = hasDefined ? 'defined' : (sel.length ? 'defined' : 'missing');
-    html += '<div class="pk-table ' + cls + '" data-pk-table-wrap="' + escHtml(t.sharedAs) + '">';
-    html += '<div class="pk-table-head"><div class="pk-table-name">' + escHtml(t.sharedAs || t.fullName) + '</div>';
-    if (hasDefined) {
-      html += '<span class="badge table">PK: ' + t.primaryKey.map(escHtml).join(', ') + '</span>';
-    } else {
-      html += '<span class="badge view">No PK</span>';
+  state.panel = {
+    mode, share, connection,
+    detail: null, detailError: null,
+    preflight: null, preflightError: null, preflightRunning: false,
+    pkSel: {}, pkUi: {},
+    run: null, phase: 'form',
+    form: { title: shareName, short: '', long: 'Published from Data Sharing app: ' + shareName },
+  };
+  el('overlay').hidden = false;
+  renderPanel();
+  if (mode !== 'unpublish') loadDetail();
+}
+
+function closePanel() {
+  if (state.pollTimer) { clearTimeout(state.pollTimer); state.pollTimer = null; }
+  const p = state.panel;
+  state.panel = null;
+  el('overlay').hidden = true;
+  if (p && p.run) loadShares(true);
+}
+
+async function loadDetail(refresh) {
+  const p = state.panel;
+  try {
+    p.detail = await api('GET', '/api/shares/' + encodeURIComponent(p.share.name) + '?warehouseId=' + encodeURIComponent(state.wh) + (refresh ? '&refresh=1' : ''));
+    if (state.panel !== p) return;
+    renderPanel();
+    if (p.connection) runPreflight();
+  } catch (e) {
+    p.detailError = e;
+    renderPanel();
+  }
+}
+
+async function runPreflight(refresh) {
+  const p = state.panel;
+  if (!p || !p.connection || !p.detail) return;
+  p.preflightRunning = true; p.preflightError = null;
+  renderPanel();
+  try {
+    const r = await api('POST', '/api/preflight', {
+      shareName: p.share.name, recipientName: p.connection, warehouseId: state.wh,
+      primaryKeys: selectedPks(p), refresh: !!refresh,
+    });
+    if (state.panel !== p) return;
+    p.preflight = r;
+  } catch (e) {
+    p.preflightError = e;
+  } finally {
+    p.preflightRunning = false;
+    if (state.panel === p) renderPanel();
+  }
+}
+
+function selectedPks(p) {
+  const out = {};
+  for (const [k, v] of Object.entries(p.pkSel)) if (v && v.length) out[k] = v;
+  return out;
+}
+
+// The PK check is recomputed locally so it turns green as soon as the user
+// picks columns, without another server round trip.
+function effectiveChecks(p) {
+  if (!p.preflight) return [];
+  return p.preflight.checks.map((c) => {
+    if (c.id !== 'pk' || !p.detail) return c;
+    if (p.detail.columnsError || p.detail.tables.some((t) => t.columnsKnown === false)) return c;
+    const missing = p.detail.tables.filter((t) => !t.hasPrimaryKey && !(p.pkSel[t.sharedAs] || []).length);
+    if (!missing.length) return { ...c, status: 'ok', detail: 'Every table has a key from Unity Catalog or from your selection.' };
+    return { ...c, status: 'warn', detail: missing.length + ' table(s) without a primary key: ' + missing.map((t) => t.sharedAs).join(', ') + '. BDC expects a key per entity. Pick key columns below, or publish without.' };
+  });
+}
+
+function renderPanel() {
+  const p = state.panel;
+  if (!p) return;
+  const body = el('panel-body');
+  if (p.mode === 'unpublish') { body.innerHTML = renderUnpublish(p); wireUnpublish(p); return; }
+
+  const title = p.mode === 'republish' ? 'Update in BDC' : 'Publish to SAP BDC';
+  let html = '<h2 id="panel-title">' + title + '</h2>' +
+    '<div class="muted">Share <code>' + escHtml(p.share.name) + '</code></div>';
+
+  if (p.phase !== 'form') {
+    body.innerHTML = html + renderRunState(p);
+    wireRunState(p);
+    return;
+  }
+
+  // Connection
+  const conns = state.overview.connections || [];
+  if (p.mode === 'republish') {
+    html += '<div class="section"><h3>BDC connection</h3><code>' + escHtml(p.connection) + '</code>' +
+      '<div class="muted mt-1">Re-sends the metadata and schema to BDC and publishes again. The grant on the share stays as it is.</div></div>';
+  } else {
+    const open = conns.filter((c) => !p.share.bdcConnections.some((b) => b.name === c.name));
+    html += '<div class="section"><h3>BDC connection</h3>' +
+      (open.length === 1
+        ? '<code>' + escHtml(open[0].name) + '</code> <span class="badge">' + escHtml(open[0].authenticationType || '') + '</span>'
+        : '<select id="conn-select"><option value="">Select a BDC connection…</option>' +
+          open.map((c) => '<option value="' + escHtml(c.name) + '"' + (c.name === p.connection ? ' selected' : '') + '>' + escHtml(c.name) + ' (' + escHtml(c.authenticationType || '?') + ')</option>').join('') +
+          '</select>') +
+      '</div>';
+  }
+
+  // Objects
+  if (p.detailError) {
+    html += '<div class="section">' + errorBox('Could not load the share:', p.detailError, 'detail-retry') + '</div>';
+  } else if (!p.detail) {
+    html += '<div class="section muted"><span class="loading"></span> Loading tables…</div>';
+  } else {
+    const types = {};
+    p.detail.objects.forEach((o) => { types[o.dataObjectType] = (types[o.dataObjectType] || 0) + 1; });
+    html += '<div class="section"><h3>Contents</h3><div class="muted">' +
+      Object.entries(types).map(([t, n]) => n + ' ' + escHtml(t.toLowerCase().replace('_', ' ')) + (n === 1 ? '' : 's')).join(', ') +
+      '</div></div>';
+  }
+
+  // Pre-flight
+  html += '<div class="section"><h3>Pre-flight checks</h3>' + renderPreflight(p) + '</div>';
+
+  // PK picker (only when needed)
+  if (p.detail) html += renderPkSection(p);
+
+  // Metadata
+  html += '<div class="section"><h3>Data product</h3><div class="metadata-grid">' +
+    '<div><label>Title</label><input id="md-title" value="' + escHtml(p.form.title) + '" /></div>' +
+    '<div><label>Short description <span class="required">*</span></label>' +
+    '<input id="md-short" value="' + escHtml(p.form.short) + '" placeholder="One line, without the title" />' +
+    '<div id="md-short-err" class="field-err" hidden></div></div>' +
+    '<div><label>Description</label><textarea id="md-long" rows="2">' + escHtml(p.form.long) + '</textarea></div>' +
+    '</div></div>';
+
+  const checks = effectiveChecks(p);
+  const blocked = !p.preflight || p.preflightRunning || checks.some((c) => c.status === 'fail');
+  html += '<div class="actions">' +
+    '<button id="btn-go" class="btn primary" type="button"' + (blocked ? ' disabled' : '') + '>' + (p.mode === 'republish' ? 'Update in BDC' : 'Publish') + '</button>' +
+    '<button id="btn-cancel" class="btn secondary" type="button">Cancel</button>' +
+    '</div>';
+  body.innerHTML = html;
+
+  const cs = el('conn-select');
+  if (cs) cs.onchange = () => { p.connection = cs.value || null; p.preflight = null; renderPanel(); runPreflight(); };
+  const dr = el('detail-retry'); if (dr) dr.onclick = () => { p.detailError = null; renderPanel(); loadDetail(); };
+  const pr = el('preflight-retry'); if (pr) pr.onclick = () => runPreflight(true);
+  const pkr = el('pk-retry'); if (pkr) pkr.onclick = () => { p.detail = null; p.preflight = null; renderPanel(); loadDetail(true); };
+  ['md-title', 'md-short', 'md-long'].forEach((id) => {
+    el(id).oninput = () => { p.form.title = el('md-title').value; p.form.short = el('md-short').value; p.form.long = el('md-long').value; };
+  });
+  el('btn-cancel').onclick = closePanel;
+  if (!blocked) el('btn-go').onclick = () => startPublish(p);
+  body.querySelectorAll('[data-copy]').forEach((b) => {
+    b.onclick = () => { navigator.clipboard && navigator.clipboard.writeText(b.getAttribute('data-copy')); b.textContent = 'Copied'; };
+  });
+  wirePkListeners(p);
+}
+
+function renderPreflight(p) {
+  if (!p.connection) return '<div class="muted">Select a BDC connection to run the checks.</div>';
+  if (!p.detail) return '<div class="muted">Waiting for the share contents…</div>';
+  if (p.preflightError) return errorBox('Pre-flight failed:', p.preflightError, 'preflight-retry');
+  if (!p.preflight || p.preflightRunning) {
+    return '<ul class="checklist"><li class="wait"><span class="icon"><span class="loading"></span></span><div>Checking objects, keys, privileges, and app access. Missing access for the app is granted as you.</div></li></ul>';
+  }
+  const icon = { ok: '✓', warn: '!', fail: '✕' };
+  return '<ul class="checklist">' + effectiveChecks(p).map((c) => {
+    let extra = '';
+    if (c.sql && c.sql.length) {
+      const text = c.sql.join(c.fixKind === 'cli' ? '\n' : ';\n') + (c.fixKind === 'cli' ? '' : ';');
+      extra = '<div class="copy-block"><pre class="code wrap">' + escHtml(text) + '</pre>' +
+        '<button class="btn secondary btn-sm" type="button" data-copy="' + escHtml(text) + '">Copy</button></div>';
     }
-    html += '</div>';
-    if (!hasDefined) {
-      if (!t.columns || !t.columns.length) {
-        html += '<div class="muted" style="margin-top:8px">Column list unavailable. The app service principal needs <code>SELECT</code> (or <code>BROWSE</code>) on <code>' + escHtml(t.fullName) + '</code> to run <code>DESCRIBE TABLE</code>. Skipping this table will publish without a PK annotation.</div>';
-      } else {
-        html += renderPkChips(t.sharedAs, sel);
-        html += renderPkSearchAndList(t);
-      }
+    if (c.errors && c.errors.length) {
+      extra += '<details><summary>Show errors</summary><pre class="code wrap">' + escHtml(c.errors.join('\n')) + '</pre></details>';
+    }
+    return '<li class="' + c.status + '"><span class="icon">' + icon[c.status] + '</span><div><div>' + escHtml(c.label) + '</div>' +
+      '<div class="detail">' + escHtml(c.detail) + '</div>' + extra + '</div></li>';
+  }).join('') + '</ul>' +
+  '<button class="btn link btn-sm" id="preflight-retry" type="button">Re-check</button>';
+}
+
+// --- Primary key picker -----------------------------------------------------
+
+function renderPkSection(p) {
+  if (p.detail.columnsError) {
+    return '<div class="section"><h3>Pick primary keys</h3>' +
+      errorBox('Couldn\'t read columns and keys from Unity Catalog:', { message: p.detail.columnsError, transient: true }, 'pk-retry') + '</div>';
+  }
+  const tables = p.detail.tables.filter((t) => t.columnsKnown !== false && !t.hasPrimaryKey);
+  if (!tables.length) return '';
+  let html = '<div class="section"><h3>Pick primary keys</h3><div class="muted mb-2">These tables have no primary key in Unity Catalog. Pick the key columns and the app adds them to the schema it sends to BDC.</div>';
+  tables.forEach((t) => {
+    const sel = p.pkSel[t.sharedAs] || [];
+    html += '<div class="pk-table ' + (sel.length ? 'defined' : 'missing') + '">' +
+      '<div class="pk-table-head"><div class="pk-table-name">' + escHtml(t.sharedAs) + '</div>' +
+      '<span class="badge ' + (sel.length ? 'table' : 'view') + '">' + (sel.length ? 'Key: ' + sel.map(escHtml).join(', ') : 'No key') + '</span></div>';
+    if (!t.columns || !t.columns.length) {
+      html += '<div class="muted mt-2">Column list not visible to you, so a key can\'t be picked here. The table publishes without a key annotation.</div>';
+    } else {
+      html += renderPkChips(t.sharedAs, sel) + renderPkList(p, t);
     }
     html += '</div>';
   });
-  html += '</div>';
-  return html;
+  return html + '</div>';
 }
 
 function renderPkChips(sharedAs, sel) {
-  if (!sel.length) {
-    return '<div class="pk-chips"><span class="pk-chips-empty">No PK columns selected yet.</span></div>';
-  }
+  if (!sel.length) return '<div class="pk-chips"><span class="pk-chips-empty">No key columns selected.</span></div>';
   return '<div class="pk-chips">' + sel.map((c) =>
-    '<span class="pk-chip">' + escHtml(c) +
-    '<button type="button" data-pk-remove data-pk-table="' + escHtml(sharedAs) + '" data-pk-col="' + escHtml(c) + '" title="Remove">×</button>' +
-    '</span>'
+    '<span class="pk-chip">' + escHtml(c) + '<button type="button" data-pk-remove data-pk-table="' + escHtml(sharedAs) + '" data-pk-col="' + escHtml(c) + '" title="Remove">×</button></span>'
   ).join('') + '</div>';
 }
 
-function renderPkSearchAndList(t) {
-  const ui = state.pkUi[t.sharedAs] || { search: '', visible: PK_PAGE_SIZE };
-  state.pkUi[t.sharedAs] = ui;
-  const search = (ui.search || '').toLowerCase();
-  const sel = state.userPkSelection[t.sharedAs] || [];
-  const filtered = search
-    ? t.columns.filter((c) => c.name.toLowerCase().includes(search) || (c.type || '').toLowerCase().includes(search))
-    : t.columns;
-  const visible = filtered.slice(0, ui.visible);
-  const remaining = Math.max(filtered.length - visible.length, 0);
+function filteredCols(t, search) {
+  const q = (search || '').toLowerCase();
+  return q ? t.columns.filter((c) => c.name.toLowerCase().includes(q) || (c.type || '').toLowerCase().includes(q)) : t.columns;
+}
 
-  let html = '<div class="pk-search">' +
-    '<input type="text" data-pk-search="' + escHtml(t.sharedAs) + '" placeholder="Search columns by name or type…" value="' + escHtml(ui.search || '') + '" />' +
-    '</div>';
-  html += '<div class="pk-list" data-pk-list="' + escHtml(t.sharedAs) + '">';
-  if (!visible.length) {
-    html += '<div class="pk-list-empty">No columns match "' + escHtml(ui.search || '') + '".</div>';
-  } else {
-    visible.forEach((c) => {
-      const isSel = sel.includes(c.name);
-      html += '<div class="pk-item ' + (isSel ? 'selected' : '') + '" data-pk-toggle data-pk-table="' + escHtml(t.sharedAs) + '" data-pk-col="' + escHtml(c.name) + '">' +
-        '<span class="col-name">' + escHtml(c.name) + '</span>' +
-        '<span style="display:flex;gap:8px;align-items:center">' +
-        (c.type ? '<span class="col-type">' + escHtml(c.type) + '</span>' : '') +
-        (isSel ? '<span class="col-check">✓</span>' : '') +
-        '</span>' +
-        '</div>';
+function renderPkList(p, t) {
+  const ui = p.pkUi[t.sharedAs] || (p.pkUi[t.sharedAs] = { search: '', visible: PK_PAGE_SIZE });
+  const sel = p.pkSel[t.sharedAs] || [];
+  const filtered = filteredCols(t, ui.search);
+  const visible = filtered.slice(0, ui.visible);
+  let html = '<div class="pk-search"><input type="text" data-pk-search="' + escHtml(t.sharedAs) + '" placeholder="Search columns…" value="' + escHtml(ui.search) + '" /></div>' +
+    '<div class="pk-list" data-pk-list="' + escHtml(t.sharedAs) + '">';
+  if (!visible.length) html += '<div class="pk-list-empty">No columns match.</div>';
+  visible.forEach((c) => {
+    const on = sel.includes(c.name);
+    html += '<div class="pk-item ' + (on ? 'selected' : '') + '" data-pk-toggle data-pk-table="' + escHtml(t.sharedAs) + '" data-pk-col="' + escHtml(c.name) + '">' +
+      '<span class="col-name">' + escHtml(c.name) + '</span><span class="row">' +
+      (c.type ? '<span class="col-type">' + escHtml(c.type) + '</span>' : '') + (on ? '<span class="col-check">✓</span>' : '') + '</span></div>';
+  });
+  if (filtered.length > visible.length) html += '<div class="pk-list-footer">Showing ' + visible.length + ' of ' + filtered.length + '. Scroll for more.</div>';
+  return html + '</div>';
+}
+
+function wirePkListeners(p) {
+  const body = el('panel-body');
+  const toggle = (t, c, remove) => {
+    const list = p.pkSel[t] || [];
+    const i = list.indexOf(c);
+    if (i >= 0) list.splice(i, 1); else if (!remove) list.push(c);
+    p.pkSel[t] = list;
+    const scroll = el('overlay').scrollTop;
+    renderPanel();
+    el('overlay').scrollTop = scroll;
+  };
+  body.querySelectorAll('[data-pk-toggle]').forEach((row) => {
+    row.onclick = () => toggle(row.getAttribute('data-pk-table'), row.getAttribute('data-pk-col'), false);
+  });
+  body.querySelectorAll('[data-pk-remove]').forEach((b) => {
+    b.onclick = (ev) => { ev.stopPropagation(); toggle(b.getAttribute('data-pk-table'), b.getAttribute('data-pk-col'), true); };
+  });
+  body.querySelectorAll('[data-pk-search]').forEach((input) => {
+    let timer;
+    input.oninput = () => {
+      clearTimeout(timer);
+      const t = input.getAttribute('data-pk-search');
+      timer = setTimeout(() => {
+        p.pkUi[t] = { search: input.value, visible: PK_PAGE_SIZE };
+        const scroll = el('overlay').scrollTop;
+        renderPanel();
+        el('overlay').scrollTop = scroll;
+        const again = body.querySelector('[data-pk-search="' + CSS.escape(t) + '"]');
+        if (again) { again.focus(); const v = again.value; again.value = ''; again.value = v; }
+      }, 150);
+    };
+  });
+  body.querySelectorAll('[data-pk-list]').forEach((list) => {
+    list.onscroll = () => {
+      const t = list.getAttribute('data-pk-list');
+      const table = p.detail.tables.find((x) => x.sharedAs === t);
+      const ui = p.pkUi[t];
+      if (!table || !ui || ui.visible >= filteredCols(table, ui.search).length) return;
+      if (list.scrollTop + list.clientHeight >= list.scrollHeight - 24) {
+        ui.visible += PK_PAGE_SIZE;
+        const top = list.scrollTop; const scroll = el('overlay').scrollTop;
+        renderPanel();
+        el('overlay').scrollTop = scroll;
+        const again = body.querySelector('[data-pk-list="' + CSS.escape(t) + '"]');
+        if (again) again.scrollTop = top;
+      }
+    };
+  });
+}
+
+// --- Publish run ------------------------------------------------------------
+
+async function startPublish(p) {
+  const title = (p.form.title || p.share.name).trim();
+  const shortDesc = (p.form.short || '').trim();
+  const err = el('md-short-err');
+  const showErr = (m) => { err.textContent = m; err.hidden = false; el('md-short').classList.add('invalid'); el('md-short').focus(); };
+  // BDC's ORD validation rejects a short description that repeats the title.
+  if (!shortDesc) return showErr('Short description is required.');
+  if (title && shortDesc.toLowerCase().includes(title.toLowerCase())) return showErr('Short description must not contain the title.');
+
+  p.phase = 'submitting';
+  renderPanel();
+  try {
+    const r = await api('POST', '/api/publish', {
+      shareName: p.share.name, recipientName: p.connection, warehouseId: state.wh,
+      title, shortDescription: shortDesc, description: (p.form.long || '').trim(),
+      primaryKeys: selectedPks(p), republish: p.mode === 'republish',
     });
+    p.run = { runId: r.runId, life: 'PENDING' };
+    p.phase = 'running';
+    renderPanel();
+    pollRun(p, '/api/publish/');
+  } catch (e) {
+    p.phase = 'error'; p.error = e;
+    renderPanel();
   }
-  if (remaining > 0) {
-    html += '<div class="pk-list-footer">Showing ' + visible.length + ' of ' + filtered.length + ' columns. Scroll to load more, or type to filter.</div>';
-  } else if (filtered.length > PK_PAGE_SIZE) {
-    html += '<div class="pk-list-footer">All ' + filtered.length + ' columns shown.</div>';
+}
+
+async function pollRun(p, base) {
+  if (state.panel !== p) return;
+  try {
+    const r = await api('GET', base + encodeURIComponent(p.run.runId));
+    const life = (r.state && r.state.life_cycle_state) || 'UNKNOWN';
+    p.run = { ...p.run, life, result: r.state && r.state.result_state, url: r.runPageUrl, detail: r };
+    if (['TERMINATED', 'INTERNAL_ERROR', 'SKIPPED'].includes(life)) {
+      if (p.run.result === 'SUCCESS') {
+        if (p.mode === 'unpublish') return finalizeUnpublish(p);
+        p.phase = 'success';
+      } else {
+        p.phase = 'failed';
+      }
+      renderPanel();
+      return;
+    }
+    renderPanel();
+    state.pollTimer = setTimeout(() => pollRun(p, base), 3000);
+  } catch (e) {
+    // A failed poll doesn't mean a failed run. Keep the run id and let the
+    // user retry; the server records the outcome either way.
+    p.pollError = e;
+    renderPanel();
   }
-  html += '</div>';
+}
+
+function progressHtml(p) {
+  const life = p.run ? p.run.life : 'SUBMITTING';
+  const phase = p.phase;
+  const steps = [['Submitted', 0], ['Running', 1], [p.mode === 'unpublish' ? 'Removed' : 'Published', 2]];
+  const idx = phase === 'success' ? 3 : life === 'RUNNING' ? 1 : 0;
+  const bar = phase === 'success' ? 'success' : (phase === 'failed' || phase === 'error') ? 'error' : 'indeterminate';
+  const link = p.run && p.run.url ? '<a href="' + escHtml(p.run.url) + '" target="_blank">View job run ' + escHtml(p.run.runId) + '</a>' : '';
+  return '<div class="progress"><div class="progress-label"><span>' +
+    escHtml(phase === 'submitting' ? 'Submitting…' : phase === 'success' ? 'Done' : (phase === 'failed' || phase === 'error') ? 'Failed' : 'Job ' + String(life).toLowerCase() + '…') +
+    '</span><span>' + link + '</span></div>' +
+    '<div class="progress-bar ' + bar + '"><div class="fill" style="width:' + (idx + 1) * 33 + '%"></div></div>' +
+    '<div class="progress-steps">' + steps.map(([label, i]) => {
+      let cls = '';
+      if (phase === 'success' || i < idx) cls = 'done';
+      else if (i === idx && bar === 'indeterminate') cls = 'active';
+      else if (bar === 'error' && i <= 1) cls = 'failed';
+      return '<div class="progress-step ' + cls + '">' + escHtml(label) + '</div>';
+    }).join('') + '</div></div>';
+}
+
+function renderRunState(p) {
+  let html = '<div class="section">' + progressHtml(p);
+  if (p.phase === 'running' || p.phase === 'submitting') {
+    html += '<div class="muted">You can close this window. The app records the result in the activity log' +
+      (p.mode === 'unpublish' ? ' and finishes the REVOKE the next time you open it.' : '.') + '</div>';
+    if (p.pollError) html += errorBox('Lost track of the run:', p.pollError, 'poll-retry');
+  }
+  if (p.phase === 'error') html += errorBox('Could not start:', p.error);
+  if (p.phase === 'failed') html += renderJobError(p.run.detail || {});
+  if (p.phase === 'success') {
+    if (p.mode === 'unpublish') {
+      html += '<div class="msg ok"><strong>Removed from BDC.</strong> <code>' + escHtml(p.share.name) + '</code> is no longer shared with <code>' + escHtml(p.connection) + '</code>. The share itself is unchanged.</div>';
+    } else {
+      html += '<div class="msg ok"><strong>' + (p.mode === 'republish' ? 'Updated in BDC.' : 'Published to BDC.') + '</strong> <code>' + escHtml(p.share.name) + '</code> → <code>' + escHtml(p.connection) + '</code></div>' +
+        '<div class="section"><h3>Next, in SAP</h3><ol class="next-steps">' +
+        '<li>Wait a few minutes for the data product to show up in the BDC catalog. If it doesn\'t, run a metadata extraction for this Databricks connection in the BDC cockpit.</li>' +
+        '<li>Install or share the data product into the SAP Datasphere space that needs it.</li>' +
+        '<li>Build your models on it in Datasphere or SAP Analytics Cloud.</li>' +
+        '</ol><div class="muted"><a href="' + SAP_HELP + '" target="_blank" rel="noopener">SAP Business Data Cloud help</a></div></div>';
+    }
+  }
+  if (p.phase === 'finalize_failed') {
+    html += '<div class="msg err"><strong>Removed from BDC, but the REVOKE failed:</strong> ' + escHtml(p.error && p.error.message) +
+      ' The grant on the share is still in place. The app retries the next time you open it, or use Retry.' +
+      ' <button class="btn secondary btn-sm" id="finalize-retry" type="button">Retry</button></div>';
+  }
+  html += '</div><div class="actions"><button class="btn secondary" id="btn-done" type="button">Close</button></div>';
   return html;
 }
 
-function wirePrimaryKeyListeners() {
-  // Toggle column selection on row click.
-  document.querySelectorAll('[data-pk-toggle]').forEach((row) => {
-    row.addEventListener('click', () => {
-      const t = row.getAttribute('data-pk-table');
-      const c = row.getAttribute('data-pk-col');
-      const list = state.userPkSelection[t] || [];
-      const i = list.indexOf(c);
-      if (i >= 0) list.splice(i, 1);
-      else list.push(c);
-      state.userPkSelection[t] = list;
-      renderReview();
-    });
-  });
-
-  // Remove-chip button.
-  document.querySelectorAll('[data-pk-remove]').forEach((btn) => {
-    btn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      const t = btn.getAttribute('data-pk-table');
-      const c = btn.getAttribute('data-pk-col');
-      const list = state.userPkSelection[t] || [];
-      const i = list.indexOf(c);
-      if (i >= 0) list.splice(i, 1);
-      state.userPkSelection[t] = list;
-      renderReview();
-    });
-  });
-
-  // Search input (debounced) — resets visible count on typing.
-  document.querySelectorAll('[data-pk-search]').forEach((input) => {
-    let timer;
-    input.addEventListener('input', (ev) => {
-      clearTimeout(timer);
-      const t = input.getAttribute('data-pk-search');
-      const val = input.value;
-      timer = setTimeout(() => {
-        state.pkUi[t] = { search: val, visible: PK_PAGE_SIZE };
-        renderReview();
-        // Refocus the search input after re-render.
-        const again = document.querySelector('[data-pk-search="' + CSS.escape(t) + '"]');
-        if (again) {
-          again.focus();
-          const v = again.value;
-          again.value = '';
-          again.value = v;
-        }
-      }, 150);
-    });
-  });
-
-  // Infinite scroll: when list is near the bottom, bump visible count.
-  document.querySelectorAll('[data-pk-list]').forEach((list) => {
-    list.addEventListener('scroll', () => {
-      const t = list.getAttribute('data-pk-list');
-      const ui = state.pkUi[t] || { search: '', visible: PK_PAGE_SIZE };
-      const table = (state.tablesPk && state.tablesPk.tables || []).find((x) => x.sharedAs === t);
-      if (!table) return;
-      const filtered = ui.search
-        ? table.columns.filter((c) => c.name.toLowerCase().includes(ui.search.toLowerCase()) || (c.type || '').toLowerCase().includes(ui.search.toLowerCase()))
-        : table.columns;
-      if (ui.visible >= filtered.length) return;
-      if (list.scrollTop + list.clientHeight >= list.scrollHeight - 24) {
-        state.pkUi[t] = { search: ui.search, visible: Math.min(ui.visible + PK_PAGE_SIZE, filtered.length) };
-        // Preserve scroll position after re-render.
-        const scrollTop = list.scrollTop;
-        renderReview();
-        const again = document.querySelector('[data-pk-list="' + CSS.escape(t) + '"]');
-        if (again) again.scrollTop = scrollTop;
-      }
-    });
-  });
+function wireRunState(p) {
+  el('btn-done').onclick = closePanel;
+  const pr = el('poll-retry');
+  if (pr) pr.onclick = () => { p.pollError = null; renderPanel(); pollRun(p, p.mode === 'unpublish' ? '/api/unpublish/' : '/api/publish/'); };
+  const fr = el('finalize-retry');
+  if (fr) fr.onclick = () => finalizeUnpublish(p);
 }
 
-function isPrimaryKeySelectionComplete() {
-  if (!state.tablesPk || !state.tablesPk.tables) return true;
-  for (const t of state.tablesPk.tables) {
-    if (t.hasPrimaryKey) continue;
-    if (!t.columns || !t.columns.length) continue; // can't fix, allow publish
-    const sel = state.userPkSelection[t.sharedAs] || [];
-    if (sel.length === 0) return false;
-  }
-  return true;
-}
-
-function renderJobError(r, lc, rs) {
+function renderJobError(r) {
   const err = r.error || {};
-  const lines = [];
-  if (err.message) lines.push('<div><strong>Error:</strong> ' + escHtml(err.message) + '</div>');
-  else if (r.stateMessage) lines.push('<div><strong>Status:</strong> ' + escHtml(r.stateMessage) + '</div>');
-  if (err.notebookExit) lines.push('<div style="margin-top:6px"><strong>Notebook exit:</strong> ' + escHtml(err.notebookExit) + '</div>');
-  if (err.trace) {
-    const t = String(err.trace).trim();
-    lines.push('<details style="margin-top:8px"><summary style="cursor:pointer">Show traceback</summary><pre class="code" style="white-space:pre-wrap">' + escHtml(t) + '</pre></details>');
-  }
-  if (err.logs) {
-    lines.push('<details style="margin-top:6px"><summary style="cursor:pointer">Show logs' + (err.logsTruncated ? ' (truncated)' : '') + '</summary><pre class="code" style="white-space:pre-wrap">' + escHtml(err.logs) + '</pre></details>');
-  }
-  if (!lines.length) lines.push('<div>' + escHtml(lc) + ' / ' + escHtml(rs) + '</div>');
-  const verb = state.mode === 'unpublish' ? 'Delete' : 'Publish';
-  return '<div class="msg err"><strong>' + verb + ' failed.</strong> ' +
-    escHtml(lc) + ' / ' + escHtml(rs) + lines.map(l => '<div style="margin-top:6px">' + l + '</div>').join('') +
-    '</div>';
+  let html = '<div class="msg err"><strong>' + (state.panel && state.panel.mode === 'unpublish' ? 'Removal failed.' : 'Publish failed.') + '</strong>';
+  if (err.message) html += '<div class="mt-2">' + escHtml(err.message) + '</div>';
+  else if (r.stateMessage) html += '<div class="mt-2">' + escHtml(r.stateMessage) + '</div>';
+  const hint = failureHint(err.message || r.stateMessage || '');
+  if (hint) html += '<div class="mt-2">' + hint + '</div>';
+  if (err.trace) html += '<details><summary>Show traceback</summary><pre class="code wrap">' + escHtml(String(err.trace).trim()) + '</pre></details>';
+  if (err.logs) html += '<details><summary>Show logs' + (err.logsTruncated ? ' (truncated)' : '') + '</summary><pre class="code wrap">' + escHtml(err.logs) + '</pre></details>';
+  return html + '</div>';
 }
 
-function renderProgress(phase, lifeCycle, runPageUrl, runId) {
-  // phase: 'submitting' | 'pending' | 'running' | 'success' | 'error'
-  const isUnpub = state.mode === 'unpublish';
-  const phases = [
-    { key: 'submitted', label: 'Submitted' },
-    { key: 'running', label: 'Running' },
-    { key: 'published', label: isUnpub ? 'Deleted' : 'Published' },
-  ];
-  let currentIdx = 0;
-  if (phase === 'pending' || phase === 'submitting') currentIdx = 0;
-  else if (phase === 'running') currentIdx = 1;
-  else if (phase === 'success') currentIdx = 2;
-  else if (phase === 'error') currentIdx = -1;
-
-  const barClass = phase === 'success' ? 'success' : phase === 'error' ? 'error' : 'indeterminate';
-  const labelText = phase === 'success' ? (isUnpub ? 'Deleted successfully' : 'Published successfully') :
-                    phase === 'error' ? (isUnpub ? 'Delete failed' : 'Publish failed') :
-                    phase === 'submitting' ? 'Submitting job…' :
-                    ('Job ' + (lifeCycle ? lifeCycle.toLowerCase() : 'starting') + '…');
-  const runPage = runPageUrl ? '<a href="' + escHtml(runPageUrl) + '" target="_blank">View run ' + escHtml(runId || '') + '</a>' : '';
-
-  return '<div class="progress">' +
-    '<div class="progress-label"><span>' + escHtml(labelText) + '</span>' + (runPage ? '<span>' + runPage + '</span>' : '') + '</div>' +
-    '<div class="progress-bar ' + barClass + '"><div class="fill" style="width:' + (phase === 'success' ? 100 : phase === 'error' ? 100 : (currentIdx + 1) * 33) + '%"></div></div>' +
-    '<div class="progress-steps">' +
-    phases.map((p, i) => {
-      let cls = '';
-      if (phase === 'success') cls = 'done';
-      else if (phase === 'error' && i <= 1) cls = 'failed';
-      else if (i < currentIdx) cls = 'done';
-      else if (i === currentIdx) cls = 'active';
-      return '<div class="progress-step ' + cls + '">' + escHtml(p.label) + '</div>';
-    }).join('') +
-    '</div></div>';
+function failureHint(msg) {
+  const m = String(msg).toLowerCase();
+  if (m.includes('secret does not exist') || m.includes('secret scope')) return 'The SDK secret scope is missing. See <a href="/faq.html#secret-scope">FAQ: secret scope</a>.';
+  if (m.includes('permission') || m.includes('privilege')) return 'A permission is missing. See <a href="/faq.html#privileges">FAQ: privileges</a>.';
+  if (m.includes('primary key')) return 'See <a href="/faq.html#primary-keys">FAQ: primary keys</a>.';
+  return '';
 }
 
-async function runPublish() {
-  const title = (el('md-title').value || state.selectedShare).trim();
-  const shortDesc = el('md-short').value.trim();
-  const longDesc = (el('md-long').value || '').trim();
-  const runResult = el('run-result');
+// --- Unpublish --------------------------------------------------------------
 
-  // Inline validation for the short description: required, and must not
-  // contain the data product title (BDC's ORD validator rejects when the two
-  // overlap; the user requested a stricter "must not contain" rule).
-  const shortInput = el('md-short');
-  const shortErr = el('md-short-err');
-  shortInput.classList.remove('invalid');
-  shortErr.hidden = true; shortErr.textContent = '';
-  function showShortErr(msg) {
-    shortErr.textContent = msg;
-    shortErr.hidden = false;
-    shortInput.classList.add('invalid');
-    shortInput.focus();
-  }
-  if (!shortDesc) { showShortErr('Short description is required.'); return; }
-  if (title && shortDesc.toLowerCase().includes(title.toLowerCase())) {
-    showShortErr('Short description must not contain the data product title.');
-    return;
-  }
+function renderUnpublish(p) {
+  let html = '<h2 id="panel-title">Unpublish from SAP BDC</h2><div class="muted">Share <code>' + escHtml(p.share.name) + '</code></div>';
+  if (p.phase !== 'form') return html + renderRunState(p);
+  return html +
+    '<div class="section"><div class="msg warn">This removes <code>' + escHtml(p.share.name) + '</code> from the BDC connection <code>' + escHtml(p.connection) + '</code>:' +
+    '<ul><li>In BDC: the data product, its metadata and schema are deleted.</li>' +
+    '<li>In Databricks: once BDC confirms, <code>SELECT</code> is revoked from the connection. The share and its tables stay as they are.</li></ul>' +
+    'SAP consumers lose access to this data.</div></div>' +
+    '<div class="actions"><button class="btn danger" id="btn-unpublish" type="button">Unpublish</button>' +
+    '<button class="btn secondary" id="btn-cancel" type="button">Cancel</button></div>';
+}
 
-  runResult.innerHTML = renderProgress('submitting');
-
-  // Build primaryKeys payload from user selection (only for tables without UC PK).
-  const primaryKeys = {};
-  if (state.tablesPk && state.tablesPk.tables) {
-    for (const t of state.tablesPk.tables) {
-      if (t.hasPrimaryKey) continue;
-      const sel = state.userPkSelection[t.sharedAs] || [];
-      if (sel.length) primaryKeys[t.sharedAs] = sel;
+function wireUnpublish(p) {
+  if (p.phase !== 'form') return wireRunState(p);
+  el('btn-cancel').onclick = closePanel;
+  el('btn-unpublish').onclick = async () => {
+    p.phase = 'submitting';
+    renderPanel();
+    try {
+      const r = await api('POST', '/api/unpublish', { shareName: p.share.name, recipientName: p.connection, warehouseId: state.wh });
+      p.run = { runId: r.runId, life: 'PENDING' };
+      p.phase = 'running';
+      renderPanel();
+      pollRun(p, '/api/unpublish/');
+    } catch (e) {
+      p.phase = 'error'; p.error = e;
+      renderPanel();
     }
-  }
-
-  try {
-    const r = await api('POST', '/api/publish', {
-      shareName: state.selectedShare, recipientName: state.selectedRecipient,
-      warehouseId: state.warehouseId,
-      title, shortDescription: shortDesc, description: longDesc,
-      primaryKeys,
-    });
-    state.currentRunId = r.runId;
-    runResult.innerHTML = renderProgress('pending', 'PENDING', null, r.runId);
-    pollRun(r.runId, 'publish');
-  } catch (e) {
-    runResult.innerHTML = renderProgress('error') +
-      '<div class="msg err"><strong>Failed:</strong> ' + escHtml(e.message) + '</div>';
-  }
+  };
 }
 
-async function runUnpublish() {
-  const runResult = el('run-result');
-  runResult.innerHTML = renderProgress('submitting');
+async function finalizeUnpublish(p) {
+  p.phase = 'running';
+  p.run.life = 'REVOKING';
+  renderPanel();
   try {
-    const r = await api('POST', '/api/unpublish', {
-      shareName: state.selectedShare,
-      recipientName: state.selectedRecipient,
-      warehouseId: state.warehouseId,
+    await api('POST', '/api/unpublish/' + encodeURIComponent(p.run.runId) + '/finalize', {
+      shareName: p.share.name, recipientName: p.connection, warehouseId: state.wh,
     });
-    state.currentRunId = r.runId;
-    runResult.innerHTML = renderProgress('pending', 'PENDING', null, r.runId);
-    pollRun(r.runId, 'unpublish');
+    p.phase = 'success';
   } catch (e) {
-    runResult.innerHTML = renderProgress('error') +
-      '<div class="msg err"><strong>Failed:</strong> ' + escHtml(e.message) + '</div>';
+    p.phase = 'finalize_failed'; p.error = e;
   }
-}
-
-async function pollRun(runId, mode) {
-  mode = mode === 'unpublish' ? 'unpublish' : 'publish';
-  if (state.pollTimer) clearTimeout(state.pollTimer);
-  const runResult = el('run-result');
-  const endpoint = mode === 'unpublish' ? '/api/unpublish/' : '/api/publish/';
-  try {
-    const qs = '?warehouseId=' + encodeURIComponent(state.warehouseId || '') +
-      '&shareName=' + encodeURIComponent(state.selectedShare || '') +
-      '&recipientName=' + encodeURIComponent(state.selectedRecipient || '');
-    const r = await api('GET', endpoint + encodeURIComponent(runId) + qs);
-    const lc = r.state && r.state.life_cycle_state ? r.state.life_cycle_state : (r.status && r.status.state || 'UNKNOWN');
-    const rs = r.state && r.state.result_state ? r.state.result_state : '';
-    const runPageUrl = r.runPageUrl || null;
-
-    if (lc === 'TERMINATED' || lc === 'INTERNAL_ERROR' || lc === 'SKIPPED') {
-      if (rs === 'SUCCESS') {
-        // Delete flow: REVOKE SELECT runs after the BDC delete succeeds, as
-        // the user via OBO. If REVOKE fails, surface it but keep the BDC
-        // delete reported as success — the operator can re-run REVOKE.
-        if (mode === 'unpublish') {
-          try {
-            await api('POST', '/api/unpublish/' + encodeURIComponent(runId) + '/finalize', {
-              shareName: state.selectedShare,
-              recipientName: state.selectedRecipient,
-              warehouseId: state.warehouseId,
-            });
-          } catch (e) {
-            runResult.innerHTML = renderProgress('error', lc, runPageUrl, runId) +
-              '<div class="msg err"><strong>BDC delete succeeded, but REVOKE SELECT failed:</strong> ' +
-              escHtml(e.message) + ' The BDC catalog entry is gone, but the Databricks SQL grant remains. ' +
-              'Re-run delete or revoke manually.</div>';
-            return;
-          }
-        }
-        const successMsg = mode === 'unpublish'
-          ? 'Share deleted from BDC.'
-          : 'Share published to BDC.';
-        const syncHint = mode === 'unpublish'
-          ? ''
-          : '<div class="msg info">The data product can take a few minutes to appear in SAP BDC. If it doesn\'t show up, trigger a metadata extraction for the BDC Connect connection to sync it.</div>';
-        runResult.innerHTML = renderProgress('success', lc, runPageUrl, runId) +
-          '<div class="msg ok"><strong>' + escHtml(successMsg) + '</strong></div>' + syncHint;
-        el('tile-review').className = 'tile full-width published';
-        if (state.selectedShare) {
-          // Optimistic update: keep the in-memory publishedRecipients list in
-          // sync with the action so the dropdowns reflect it immediately. The
-          // authoritative refresh below replaces it with server data anyway.
-          const s = state.shares.find((x) => x.name === state.selectedShare);
-          if (s) {
-            s.publishedRecipients = Array.isArray(s.publishedRecipients) ? s.publishedRecipients.slice() : [];
-            if (mode === 'unpublish') {
-              if (state.selectedRecipient) {
-                s.publishedRecipients = s.publishedRecipients.filter((n) => n !== state.selectedRecipient);
-              }
-            } else if (state.selectedRecipient && !s.publishedRecipients.includes(state.selectedRecipient)) {
-              s.publishedRecipients.push(state.selectedRecipient);
-            }
-          }
-          if (mode === 'unpublish') {
-            if (s && s.publishedRecipients.length === 0) state.publishedShares.delete(state.selectedShare);
-          } else {
-            state.publishedShares.add(state.selectedShare);
-          }
-          persistPublishedShares();
-          renderShareOptions();
-          renderRecipientOptions();
-          // Refresh from server so the status is authoritative (grants row
-          // definitely added/removed).
-          loadSharesAndRecipients();
-        }
-      } else {
-        runResult.innerHTML = renderProgress('error', lc, runPageUrl, runId) + renderJobError(r, lc, rs);
-      }
-      return;
-    }
-    const phase = (lc === 'RUNNING') ? 'running' : 'pending';
-    runResult.innerHTML = renderProgress(phase, lc, runPageUrl, runId);
-    state.pollTimer = setTimeout(() => pollRun(runId, mode), 3000);
-  } catch (e) {
-    runResult.innerHTML = renderProgress('error') +
-      '<div class="msg err">Polling error: ' + escHtml(e.message) + '</div>';
-  }
-}
-
-async function runDiagnostics() {
-  const body = el('diag-body');
-  try {
-    const d = await api('GET', '/api/diag');
-    let html = '';
-    html += '<div class="muted">Auth mode: <strong>App Service Principal</strong> (client_credentials). User identity from forwarded headers.</div>';
-    html += '<ul style="list-style:none;padding:0;margin:10px 0 0">';
-    html += '<li>SP OAuth client ID: <code>' + escHtml(d.env.DATABRICKS_CLIENT_ID || '—') + '</code></li>';
-    html += '<li>SP secret: <code>' + escHtml(d.env.DATABRICKS_CLIENT_SECRET || '—') + '</code></li>';
-    html += '<li>Workspace host: <code>' + escHtml(d.env.DATABRICKS_HOST || '—') + '</code></li>';
-    html += '<li>Forwarded user: <code>' + escHtml((d.forwardedUser && d.forwardedUser.userName) || '—') + '</code></li>';
-    html += '</ul>';
-
-    if (d.queries) {
-      html += '<div class="muted" style="margin-top:12px">SQL statements the app runs (variable placeholders in &lt;angle brackets&gt;):</div>';
-      html += '<pre class="code" style="white-space:pre-wrap">' + escHtml(Object.entries(d.queries).map(([k, v]) => k + ':\n  ' + v).join('\n\n')) + '</pre>';
-    }
-
-    html += '<div class="muted" style="margin-top:12px">Live checks:</div>';
-    (d.checks || []).forEach(c => {
-      html += '<div class="diag-check ' + (c.ok ? 'ok' : 'err') + '">';
-      html += '<div><strong>' + escHtml(c.check) + '</strong> — ' + (c.ok ? '<span style="color:var(--ok)">OK</span>' : '<span style="color:var(--err)">FAILED' + (c.status ? ' (HTTP ' + c.status + ')' : '') + '</span>') + '</div>';
-      if (c.sqlRun) html += '<pre class="code" style="white-space:pre-wrap;margin-top:4px">' + escHtml(c.sqlRun) + '</pre>';
-      if (c.rule) html += '<div class="muted" style="margin-top:4px"><em>rule:</em> ' + escHtml(c.rule) + '</div>';
-      if (c.publishedToBdc !== undefined) {
-        html += '<div style="margin-top:4px">publishedToBdc: <strong>' + (c.publishedToBdc ? 'true' : 'false') + '</strong>' +
-          (c.bdcGrantPrincipals && c.bdcGrantPrincipals.length ? ' — matched BDC recipients: <code>' + c.bdcGrantPrincipals.map(escHtml).join(', ') + '</code>' : '') +
-          '</div>';
-      }
-      if (c.ok) {
-        if (c.count != null) html += '<div class="muted">count: ' + c.count + '</div>';
-        if (c.sample && c.sample.length) html += '<pre class="code">' + escHtml(JSON.stringify(c.sample, null, 2)) + '</pre>';
-      } else {
-        html += '<div style="color:var(--err)">' + escHtml(c.message || '') + '</div>';
-        if (c.details) html += '<pre class="code">' + escHtml(JSON.stringify(c.details, null, 2)) + '</pre>';
-      }
-      html += '</div>';
-    });
-    html += '<details style="margin-top:12px"><summary>Raw diagnostics</summary><pre class="code">' + escHtml(JSON.stringify(d, null, 2)) + '</pre></details>';
-    body.innerHTML = html;
-  } catch (e) { body.innerHTML = '<div class="msg err">Diagnostics failed: ' + escHtml(e.message) + '</div>'; }
+  if (state.panel === p) renderPanel();
 }
 </script>
 </body>

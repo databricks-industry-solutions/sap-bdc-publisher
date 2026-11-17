@@ -37,6 +37,9 @@ async function fetchWithToken(token, urlPath, init = {}) {
 }
 
 // SP-token-based helpers
+export async function spApi(method, urlPath, body) {
+  return fetchWithToken(await getSpToken(), urlPath, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
+}
 async function spGet(urlPath) { return fetchWithToken(await getSpToken(), urlPath, { method: 'GET' }); }
 async function spPost(urlPath, body) { return fetchWithToken(await getSpToken(), urlPath, { method: 'POST', body: JSON.stringify(body || {}) }); }
 
@@ -100,10 +103,14 @@ export async function kickWarehouseStart(id) {
 }
 
 // -----------------------------------------------------------------------------
-// Statement Execution — user OBO (queries run as the user).
+// Statement Execution. One implementation, two identities: the user (OBO)
+// for anything that needs their UC privileges, the SP for activity-log
+// writes, pre-flight probes and the reconciler.
 // -----------------------------------------------------------------------------
 
-export async function executeStatement(req, { statement, warehouseId, parameters }) {
+const STATEMENT_TIMEOUT_MS = 120_000;
+
+async function runStatement(get, post, { statement, warehouseId, parameters }) {
   const submitBody = {
     warehouse_id: warehouseId,
     statement,
@@ -111,19 +118,18 @@ export async function executeStatement(req, { statement, warehouseId, parameters
     on_wait_timeout: 'CONTINUE',
   };
   if (parameters && parameters.length) submitBody.parameters = parameters;
-  const submit = await userPost(req, '/api/2.0/sql/statements', submitBody);
-  let state = submit.status?.state;
-  let statementId = submit.statement_id;
-  let last = submit;
+  let last = await post('/api/2.0/sql/statements', submitBody);
+  const statementId = last.statement_id;
+  let state = last.status?.state;
   const started = Date.now();
   while (['PENDING', 'RUNNING'].includes(state)) {
-    if (Date.now() - started > 120_000) {
+    if (Date.now() - started > STATEMENT_TIMEOUT_MS) {
       const err = new Error(`Statement ${statementId} timed out after 120s (state=${state})`);
       err.status = 504; err.code = 'statement_timeout';
       throw err;
     }
     await new Promise((r) => setTimeout(r, 1500));
-    last = await userGet(req, `/api/2.0/sql/statements/${statementId}`);
+    last = await get(`/api/2.0/sql/statements/${statementId}`);
     state = last.status?.state;
   }
   if (state !== 'SUCCEEDED') {
@@ -135,43 +141,17 @@ export async function executeStatement(req, { statement, warehouseId, parameters
   return last;
 }
 
-// SP-token variant of executeStatement. Used by the activity-log writer so the
-// app SP owns every INSERT into the audit table regardless of which user
-// triggered the event.
-export async function spExecuteStatement({ statement, warehouseId, parameters }) {
-  const submitBody = {
-    warehouse_id: warehouseId,
-    statement,
-    wait_timeout: '30s',
-    on_wait_timeout: 'CONTINUE',
-  };
-  if (parameters && parameters.length) submitBody.parameters = parameters;
-  const submit = await spPost('/api/2.0/sql/statements', submitBody);
-  let state = submit.status?.state;
-  let statementId = submit.statement_id;
-  let last = submit;
-  const started = Date.now();
-  while (['PENDING', 'RUNNING'].includes(state)) {
-    if (Date.now() - started > 120_000) {
-      const err = new Error(`Statement ${statementId} timed out after 120s (state=${state})`);
-      err.status = 504; err.code = 'statement_timeout';
-      throw err;
-    }
-    await new Promise((r) => setTimeout(r, 1500));
-    last = await spGet(`/api/2.0/sql/statements/${statementId}`);
-    state = last.status?.state;
-  }
-  if (state !== 'SUCCEEDED') {
-    const err = new Error(last.status?.error?.message || `SQL statement ended in state ${state}`);
-    err.status = 400; err.code = last.status?.error?.error_code || 'statement_failed';
-    err.details = { statement, state, result: last };
-    throw err;
-  }
-  return last;
+export function executeStatement(req, args) {
+  return runStatement((u) => userGet(req, u), (u, b) => userPost(req, u, b), args);
 }
 
-export async function sqlQuery(req, warehouseId, statement) {
-  const result = await executeStatement(req, { statement, warehouseId });
+// The app SP owns every INSERT into the activity table regardless of which
+// user triggered the event.
+export function spExecuteStatement(args) {
+  return runStatement(spGet, spPost, args);
+}
+
+function toObjects(result) {
   const cols = (result.manifest?.schema?.columns || []).map((c) => c.name);
   const rows = result.result?.data_array || [];
   return rows.map((r) => {
@@ -181,7 +161,16 @@ export async function sqlQuery(req, warehouseId, statement) {
   });
 }
 
-function idQ(name) { return '`' + String(name).replace(/`/g, '``') + '`'; }
+export async function spSqlQuery(warehouseId, statement, parameters) {
+  return toObjects(await spExecuteStatement({ statement, warehouseId, parameters }));
+}
+
+export async function sqlQuery(req, warehouseId, statement, parameters) {
+  return toObjects(await executeStatement(req, { statement, warehouseId, parameters }));
+}
+
+export function idQ(name) { return '`' + String(name).replace(/`/g, '``') + '`'; }
+export function sqlStr(s) { return "'" + String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; }
 
 // -----------------------------------------------------------------------------
 // SCIM — user OBO
@@ -233,9 +222,9 @@ export function showAllInShare(req, warehouseId, name) {
   return sqlQuery(req, warehouseId, `SHOW ALL IN SHARE ${idQ(name)}`).catch(() => []);
 }
 
-// GRANT / REVOKE run as the calling user via OBO. UC's per-securable check
-// (ALTER / ownership on the share) decides whether the statement succeeds —
-// the workspace admin role on the SP is irrelevant here.
+// GRANT / REVOKE run as the calling user via OBO. Unity Catalog requires
+// either share ownership + USE RECIPIENT, or USE RECIPIENT + USE SHARE +
+// SET SHARE PERMISSION. The SP's workspace role is irrelevant here.
 export function grantSelectOnShare(req, warehouseId, shareName, recipientName) {
   return executeStatement(req, {
     warehouseId,
@@ -247,48 +236,6 @@ export function revokeSelectOnShare(req, warehouseId, shareName, recipientName) 
     warehouseId,
     statement: `REVOKE SELECT ON SHARE ${idQ(shareName)} FROM RECIPIENT ${idQ(recipientName)}`,
   });
-}
-
-// -----------------------------------------------------------------------------
-// Table inspection — user OBO
-// -----------------------------------------------------------------------------
-
-function parseFullName(fullName) {
-  const parts = String(fullName || '').split('.');
-  if (parts.length !== 3) return null;
-  return { catalog: parts[0], schema: parts[1], table: parts[2] };
-}
-
-export async function describeTableColumns(req, warehouseId, fullName) {
-  const rows = await sqlQuery(req, warehouseId, `DESCRIBE TABLE ${fullName}`).catch(() => []);
-  const cols = [];
-  for (const r of rows) {
-    const name = r.col_name || r['# col_name'];
-    if (!name) continue;
-    if (name.startsWith('#') || name === '') break;
-    cols.push({ name, type: r.data_type || null });
-  }
-  return cols;
-}
-
-export async function getTablePrimaryKey(req, warehouseId, fullName) {
-  const p = parseFullName(fullName);
-  if (!p) return [];
-  const esc = (s) => String(s).replace(/'/g, "''");
-  const q =
-    `SELECT kcu.column_name, kcu.ordinal_position ` +
-    `FROM system.information_schema.table_constraints tc ` +
-    `JOIN system.information_schema.key_column_usage kcu ` +
-    `ON tc.constraint_catalog = kcu.constraint_catalog ` +
-    `AND tc.constraint_schema = kcu.constraint_schema ` +
-    `AND tc.constraint_name = kcu.constraint_name ` +
-    `WHERE tc.constraint_type = 'PRIMARY KEY' ` +
-    `AND tc.table_catalog = '${esc(p.catalog)}' ` +
-    `AND tc.table_schema = '${esc(p.schema)}' ` +
-    `AND tc.table_name = '${esc(p.table)}' ` +
-    `ORDER BY kcu.ordinal_position`;
-  const rows = await sqlQuery(req, warehouseId, q).catch(() => []);
-  return rows.map((r) => r.column_name).filter(Boolean);
 }
 
 // -----------------------------------------------------------------------------
@@ -387,4 +334,182 @@ export function workspaceImportNotebookSp({ path: p, contentBase64, language = '
     overwrite: true,
     content: contentBase64,
   });
+}
+
+// -----------------------------------------------------------------------------
+// information_schema reads (v2). Each replaces a per-share or per-table loop
+// of SHOW / DESCRIBE statements with one statement. All run as the user, so
+// rows are limited to shares, recipients and tables the user can interact
+// with (information_schema applies UC visibility).
+// -----------------------------------------------------------------------------
+
+const IS = 'system.information_schema';
+
+// One row per (share, recipient grant). Shares without grants appear once
+// with null recipient columns.
+export async function listSharesWithGrants(req, warehouseId) {
+  return sqlQuery(req, warehouseId,
+    `SELECT s.share_name, s.share_owner, s.comment, s.created, s.created_by, s.last_altered, ` +
+    `p.recipient_name, p.privilege_type, r.authentication_type, t.table_count ` +
+    `FROM ${IS}.shares s ` +
+    `LEFT JOIN ${IS}.share_recipient_privileges p ON p.share_name = s.share_name ` +
+    `LEFT JOIN ${IS}.recipients r ON r.recipient_name = p.recipient_name ` +
+    `LEFT JOIN (SELECT share_name, COUNT(*) AS table_count FROM ${IS}.table_share_usage GROUP BY share_name) t ` +
+    `ON t.share_name = s.share_name ` +
+    `ORDER BY s.share_name, p.recipient_name`);
+}
+
+export async function listRecipientsInfo(req, warehouseId) {
+  return sqlQuery(req, warehouseId,
+    `SELECT recipient_name, recipient_id, recipient_owner, authentication_type, comment, created, created_by ` +
+    `FROM ${IS}.recipients ORDER BY recipient_name`);
+}
+
+// Group 'cat.schema.table' names by catalog. Lowercased, because
+// information_schema stores identifiers in lower case.
+function byCatalog(fullNames) {
+  const m = new Map();
+  for (const n of fullNames) {
+    const parts = String(n).toLowerCase().split('.');
+    if (parts.length !== 3) continue;
+    const [cat, sch, tbl] = parts;
+    if (!m.has(cat)) m.set(cat, { schemas: new Set(), tables: new Set(), full: new Set() });
+    const e = m.get(cat);
+    e.schemas.add(sch); e.tables.add(tbl); e.full.add(`${cat}.${sch}.${tbl}`);
+  }
+  return m;
+}
+
+async function mapLimitLocal(items, limit, fn) {
+  const out = new Array(items.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) { const idx = i++; out[idx] = await fn(items[idx]); }
+  }));
+  return out;
+}
+
+// Run one information_schema query per source catalog. The catalog-local
+// views (<catalog>.information_schema) with plain equality filters answer
+// in seconds. The metastore-wide system.information_schema views, joined
+// unfiltered or filtered through expressions, took minutes on a large
+// metastore (194s measured), so they are only a fallback here, still with
+// equality filters on catalog, schema and table.
+async function perCatalog(req, warehouseId, fullNames, build) {
+  const groups = byCatalog(fullNames);
+  const results = await mapLimitLocal(Array.from(groups.entries()), 4, async ([cat, g]) => {
+    const schemas = Array.from(g.schemas).map(sqlStr).join(', ');
+    const tables = Array.from(g.tables).map(sqlStr).join(', ');
+    let rows;
+    try {
+      rows = await sqlQuery(req, warehouseId, build(`${idQ(cat)}.information_schema`, schemas, tables, null));
+    } catch (e) {
+      // Catalogs without their own information_schema fall back to the
+      // system views.
+      rows = await sqlQuery(req, warehouseId, build(IS, schemas, tables, sqlStr(cat)));
+    }
+    // schema IN (...) AND table IN (...) can match pairs that aren't in the
+    // share; keep only the requested tables.
+    return rows
+      .map((r) => ({ ...r, _full: `${cat}.${String(r.table_schema).toLowerCase()}.${String(r.table_name).toLowerCase()}` }))
+      .filter((r) => g.full.has(r._full));
+  });
+  return results.flat();
+}
+
+// Columns + UC primary key for a set of tables. One statement per source
+// catalog (usually one in total). fullNames: ['cat.schema.table', ...].
+// Returns Map(lowercased fullName -> { columns: [{name, type}], primaryKey }).
+export async function getTablesColumnsAndPk(req, warehouseId, fullNames) {
+  const rows = await perCatalog(req, warehouseId, fullNames, (isv, schemas, tables, catFilter) => {
+    const catC = catFilter ? `AND c.table_catalog = ${catFilter} ` : '';
+    const catT = catFilter ? `AND tc.table_catalog = ${catFilter} ` : '';
+    return `SELECT c.table_schema, c.table_name, c.column_name, c.data_type, c.ordinal_position, ` +
+      `pk.ordinal_position AS pk_position ` +
+      `FROM ${isv}.columns c ` +
+      `LEFT JOIN (SELECT kcu.table_schema, kcu.table_name, kcu.column_name, kcu.ordinal_position ` +
+      `FROM ${isv}.table_constraints tc JOIN ${isv}.key_column_usage kcu ` +
+      `ON tc.constraint_catalog = kcu.constraint_catalog AND tc.constraint_schema = kcu.constraint_schema ` +
+      `AND tc.constraint_name = kcu.constraint_name ` +
+      `WHERE tc.constraint_type = 'PRIMARY KEY' ${catT}AND tc.table_schema IN (${schemas}) AND tc.table_name IN (${tables})) pk ` +
+      `ON pk.table_schema = c.table_schema AND pk.table_name = c.table_name AND pk.column_name = c.column_name ` +
+      `WHERE c.table_schema IN (${schemas}) AND c.table_name IN (${tables}) ${catC}` +
+      `ORDER BY c.table_schema, c.table_name, c.ordinal_position`;
+  });
+  const out = new Map();
+  for (const r of rows) {
+    if (!out.has(r._full)) out.set(r._full, { columns: [], pk: [] });
+    const t = out.get(r._full);
+    t.columns.push({ name: r.column_name, type: r.data_type || null });
+    if (r.pk_position != null) t.pk.push({ name: r.column_name, pos: Number(r.pk_position) });
+  }
+  for (const t of out.values()) {
+    t.primaryKey = t.pk.sort((a, b) => a.pos - b.pos).map((x) => x.name);
+    delete t.pk;
+  }
+  return out;
+}
+
+// Per-share summary for the dashboard and drift detection: table count,
+// tables without a UC primary key, and the latest last_altered across the
+// share's source tables. One statement for the share-to-table mapping, then
+// one per source catalog.
+export async function getShareSourceSummary(req, warehouseId, shareNames) {
+  if (!shareNames.length) return [];
+  const usage = await sqlQuery(req, warehouseId,
+    `SELECT share_name, catalog_name, schema_name, table_name FROM ${IS}.table_share_usage ` +
+    `WHERE share_name IN (${shareNames.map(sqlStr).join(', ')})`);
+  const full = (u) => `${u.catalog_name}.${u.schema_name}.${u.table_name}`.toLowerCase();
+  const meta = await perCatalog(req, warehouseId, usage.map(full), (isv, schemas, tables, catFilter) => {
+    const catT = catFilter ? `AND t.table_catalog = ${catFilter} ` : '';
+    const catK = catFilter ? `AND table_catalog = ${catFilter} ` : '';
+    return `SELECT t.table_schema, t.table_name, t.last_altered, ` +
+      `CASE WHEN pk.table_name IS NULL THEN 0 ELSE 1 END AS has_pk ` +
+      `FROM ${isv}.tables t ` +
+      `LEFT JOIN (SELECT DISTINCT table_schema, table_name FROM ${isv}.table_constraints ` +
+      `WHERE constraint_type = 'PRIMARY KEY' ${catK}AND table_schema IN (${schemas}) AND table_name IN (${tables})) pk ` +
+      `ON pk.table_schema = t.table_schema AND pk.table_name = t.table_name ` +
+      `WHERE t.table_schema IN (${schemas}) AND t.table_name IN (${tables}) ${catT}`;
+  }).catch((e) => { console.error('[dbx] source metadata failed', e.message); return []; });
+  const byTable = new Map(meta.map((m) => [m._full, m]));
+  const byShare = new Map();
+  for (const u of usage) {
+    const s = byShare.get(u.share_name) || { share_name: u.share_name, table_count: 0, source_last_altered: null, tables_without_pk: 0, metadata_complete: true };
+    const m = byTable.get(full(u));
+    s.table_count += 1;
+    if (!m) s.metadata_complete = false;
+    if (m && m.last_altered && (!s.source_last_altered || Date.parse(m.last_altered) > Date.parse(s.source_last_altered))) {
+      s.source_last_altered = m.last_altered;
+    }
+    if (m && String(m.has_pk) !== '1') s.tables_without_pk += 1;
+    byShare.set(u.share_name, s);
+  }
+  return Array.from(byShare.values());
+}
+
+// -----------------------------------------------------------------------------
+// Pre-flight probes (SP)
+// -----------------------------------------------------------------------------
+
+// Can the app SP read every source table? One statement: a UNION of
+// zero-row selects fails if any single table is not readable.
+export async function spCanReadTables(warehouseId, fullNames) {
+  if (!fullNames.length) return { ok: true };
+  const parts = fullNames.map((n) => `SELECT 1 AS x FROM ${n.split('.').map(idQ).join('.')} WHERE 1 = 0`);
+  try {
+    await spExecuteStatement({ warehouseId, statement: parts.join(' UNION ALL ') });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// Does the SDK secret scope exist and can the SP list it?
+export async function spCheckSecretScope(scope) {
+  try {
+    const body = await spGet(`/api/2.0/secrets/list?scope=${encodeURIComponent(scope)}`);
+    return { ok: true, keys: (body.secrets || []).map((s) => s.key) };
+  } catch (e) {
+    return { ok: false, status: e.status, error: e.message, code: e.code };
+  }
 }

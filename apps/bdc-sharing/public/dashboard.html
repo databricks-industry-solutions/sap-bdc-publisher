@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dashboard: Databricks to SAP BDC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="brand">
+      <img class="brand-logo" src="/img/databricks.svg" alt="Databricks">
+      <div><div class="brand-name">Data Sharing <span class="brand-sub">Databricks → SAP BDC</span></div></div>
+    </div>
+    <div class="header-actions">
+      <a href="/">Publish</a>
+      <a href="/dashboard.html" class="active">Dashboard</a>
+      <a href="/activity.html">Activity</a>
+      <a href="/setup.html">Setup</a>
+      <a href="/faq.html">FAQ</a>
+      <a href="/docs.html" target="_blank">Documentation</a>
+      <div id="user-badge" class="user-badge"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="welcome">
+      <h1>Dashboard</h1>
+      <div class="toolbar">
+        <div class="seg" id="window-seg" role="group" aria-label="Time window">
+          <button type="button" data-w="7d">7 days</button>
+          <button type="button" data-w="30d" class="active">30 days</button>
+          <button type="button" data-w="90d">90 days</button>
+        </div>
+        <label id="all-wrap" hidden><input type="checkbox" id="all-users" /> All users</label>
+        <button class="btn secondary btn-sm" id="refresh" type="button">Refresh</button>
+        <span class="muted" id="generated"></span>
+      </div>
+      <div id="compute"></div>
+    </section>
+
+    <div id="msg"></div>
+    <div id="kpis" class="kpis"></div>
+    <section class="card" id="attention-card" hidden>
+      <h2>Needs attention</h2>
+      <ul class="checklist attention" id="attention"></ul>
+    </section>
+    <section class="card">
+      <h2>Published shares</h2>
+      <div class="card-sub">Each row is a share granted to a BDC connection.</div>
+      <div id="published"></div>
+    </section>
+    <div class="cols">
+      <section class="card">
+        <h2>Activity over time</h2>
+        <div id="activity-chart"></div>
+      </section>
+      <section class="card">
+        <h2>Failures by reason</h2>
+        <div id="failures"></div>
+        <div id="publishers"></div>
+      </section>
+    </div>
+    <section class="card">
+      <h2>SAP reads</h2>
+      <div class="card-sub">Delta Sharing queries from BDC connections, from the audit log.</div>
+      <div id="usage"></div>
+    </section>
+    <section class="card">
+      <h2>AI/BI dashboard</h2>
+      <div class="muted">The same data as an AI/BI dashboard you can slice, schedule and share in Databricks. It runs with each viewer's own permissions.</div>
+      <div id="aibi" class="mt-3"><span class="loading"></span></div>
+    </section>
+  </main>
+</div>
+
+<script src="/common.js"></script>
+<script>
+const { api, escHtml, errorBox, fmtDate, fmtAgo, fmtNum, fmtBytes } = window.BDC;
+const state = { wh: null, window: '30d', all: false, data: null, loading: false };
+function el(id) { return document.getElementById(id); }
+
+(function boot() {
+  BDC.renderUserBadge('user-badge');
+  el('window-seg').querySelectorAll('button').forEach((b) => {
+    b.onclick = () => {
+      state.window = b.getAttribute('data-w');
+      el('window-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+      load(false);
+    };
+  });
+  el('all-users').onchange = (e) => { state.all = e.target.checked; load(false); };
+  el('refresh').onclick = () => load(true);
+  renderSkeleton();
+  BDC.mountCompute(el('compute'), (id) => { state.wh = id; load(false); });
+  loadAibi();
+})();
+
+async function loadAibi() {
+  try {
+    const st = await api('GET', '/api/setup/aibi');
+    if (st.exists) {
+      el('aibi').innerHTML = '<a class="btn secondary btn-sm" href="' + escHtml(st.url) + '" target="_blank" rel="noopener">Open AI/BI dashboard</a>' +
+        (st.outdated ? ' <span class="muted">A newer version ships with this app. Update it on the <a href="/setup.html">Setup</a> page.</span>' : '');
+    } else {
+      el('aibi').innerHTML = '<span class="muted">Not created yet. Create it with one click on the <a href="/setup.html">Setup</a> page.</span>';
+    }
+  } catch (e) {
+    el('aibi').innerHTML = errorBox('Could not check the AI/BI dashboard:', e);
+  }
+}
+
+function renderSkeleton() {
+  el('kpis').innerHTML = ['Shares in BDC', 'Tables in BDC', 'Publish success', 'SAP reads'].map((l) =>
+    '<div class="kpi"><div class="label">' + l + '</div><div class="value"><span class="loading"></span></div></div>').join('');
+}
+
+async function load(refresh) {
+  if (!state.wh) return;
+  state.loading = true;
+  el('refresh').disabled = true;
+  el('msg').innerHTML = '';
+  if (!state.data) renderSkeleton();
+  try {
+    state.data = await api('GET', '/api/dashboard?warehouseId=' + encodeURIComponent(state.wh) +
+      '&window=' + state.window + (state.all ? '&all=true' : '') + (refresh ? '&refresh=1' : ''));
+    render();
+  } catch (e) {
+    el('msg').innerHTML = errorBox('Could not load the dashboard:', e, 'dash-retry');
+    el('dash-retry').onclick = () => load(true);
+  } finally {
+    state.loading = false;
+    el('refresh').disabled = false;
+  }
+}
+
+function render() {
+  const d = state.data;
+  el('all-wrap').hidden = !d.isAdmin;
+  el('generated').textContent = 'Updated ' + fmtAgo(d.generatedAt) + (d.viewingAll ? ' · all users' : ' · your activity');
+  renderKpis(d);
+  renderAttention(d);
+  renderPublished(d);
+  renderActivityChart(d);
+  renderFailures(d);
+  renderUsage(d);
+}
+
+function pct(x) { return x == null ? '—' : Math.round(x * 100) + '%'; }
+
+function renderKpis(d) {
+  const t1 = d.tier1; const t2 = d.tier2; const t3 = d.tier3;
+  const tiles = [];
+  tiles.push('<div class="kpi"><div class="label">Shares in BDC</div><div class="value">' + fmtNum(t1.sharesInBdc) + '</div>' +
+    '<div class="sub">' + fmtNum(t1.connectionsInUse) + ' BDC connection(s) · ' + fmtNum(t1.visibleShares) + ' shares visible</div></div>');
+  tiles.push('<div class="kpi"><div class="label">Tables in BDC</div><div class="value">' + fmtNum(t1.tablesInBdc) + '</div>' +
+    '<div class="sub">' + fmtNum(t1.tablesWithoutPk) + ' without a UC primary key</div></div>');
+  if (t2.available) {
+    const s = t2.publishSuccess;
+    let delta = '';
+    if (s.rate != null && s.prevRate != null) {
+      const diff = Math.round((s.rate - s.prevRate) * 100);
+      delta = ' · ' + (diff >= 0 ? '+' : '') + diff + ' pts vs previous ' + d.days + 'd';
+    }
+    tiles.push('<div class="kpi"><div class="label">Publish success (' + d.days + 'd)</div><div class="value">' + pct(s.rate) + '</div>' +
+      '<div class="sub">' + fmtNum(s.ok) + ' of ' + fmtNum(s.ok + s.failed) + ' publishes' + delta + '</div></div>');
+  } else {
+    tiles.push('<div class="kpi off"><div class="label">Publish success</div><div class="value">Activity log not set up</div>' +
+      '<div class="sub"><a href="/activity.html">Set it up</a></div></div>');
+  }
+  if (t3.available) {
+    tiles.push('<div class="kpi"><div class="label">SAP reads (' + d.days + 'd)</div><div class="value">' + fmtNum(t3.totals.queries) + '</div>' +
+      '<div class="sub">queries · ' + fmtBytes(t3.totals.bytes) + ' scanned</div>' + sparkline(t3.daily, d.days) + '</div>');
+  } else {
+    tiles.push('<div class="kpi off"><div class="label">SAP reads</div><div class="value">Not enabled</div>' +
+      '<div class="sub"><a href="#usage">How to enable</a></div></div>');
+  }
+  el('kpis').innerHTML = tiles.join('');
+}
+
+// Tiny daily trend under the SAP reads number. Decorative summary only; the
+// same numbers are in the usage table below.
+function sparkline(daily, days) {
+  if (!daily || !daily.length) return '';
+  const byDate = new Map(daily.map((x) => [x.date, x.queries]));
+  const vals = [];
+  for (let i = days - 1; i >= 0; i--) vals.push(byDate.get(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10)) || 0);
+  const max = Math.max(1, ...vals);
+  const w = 160; const h = 26;
+  const pts = vals.map((v, i) => (i * w / Math.max(1, vals.length - 1)).toFixed(1) + ',' + (h - 2 - (v / max) * (h - 4)).toFixed(1)).join(' ');
+  return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" class="mt-2" aria-hidden="true">' +
+    '<polyline points="' + pts + '" fill="none" stroke="var(--s-ok)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+}
+
+function renderAttention(d) {
+  const items = d.attention || [];
+  el('attention-card').hidden = !items.length;
+  if (!items.length) return;
+  const publishedPairs = new Set((d.published || []).map((r) => r.shareName + '\0' + r.connection));
+  el('attention').innerHTML = items.map((a, i) => {
+    let btn = '';
+    const q = (act) => '/?act=' + act + '&share=' + encodeURIComponent(a.shareName) + '&conn=' + encodeURIComponent(a.connection || '');
+    if (a.action === 'republish') btn = '<a class="btn secondary btn-sm" href="' + q('republish') + '">Update in BDC</a>';
+    else if (a.action === 'publish') btn = '<a class="btn secondary btn-sm" href="' + q(publishedPairs.has(a.shareName + '\0' + a.connection) ? 'republish' : 'publish') + '">Retry</a>';
+    else if (a.action === 'finish_revoke') btn = '<button class="btn secondary btn-sm" type="button" data-finish="' + i + '">Finish</button>';
+    else if (a.action === 'review') btn = '<a class="btn secondary btn-sm" href="' + q('unpublish') + '">Review</a>';
+    return '<li class="warn"><span class="icon">!</span><div class="check-head">' +
+      '<div><div><code>' + escHtml(a.shareName) + '</code> → <code>' + escHtml(a.connection || '') + '</code></div><div class="detail">' + escHtml(a.text) + '</div></div>' +
+      btn + '</div></li>';
+  }).join('');
+  el('attention').querySelectorAll('[data-finish]').forEach((b) => {
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Revoking…';
+      try {
+        const r = await api('POST', '/api/unpublish/finalize-pending', { warehouseId: state.wh });
+        const failed = (r.results || []).filter((x) => !x.ok);
+        if (failed.length) el('msg').innerHTML = '<div class="msg err">REVOKE failed: ' + failed.map((f) => escHtml(f.shareName + ': ' + f.error)).join('<br>') + '</div>';
+        load(true);
+      } catch (e) {
+        el('msg').innerHTML = errorBox('REVOKE failed:', e);
+        b.disabled = false; b.textContent = 'Finish';
+      }
+    };
+  });
+}
+
+function renderPublished(d) {
+  const rows = d.published || [];
+  if (!rows.length) {
+    el('published').innerHTML = '<div class="empty">Nothing is published to BDC yet. <a href="/">Publish a share</a></div>';
+    return;
+  }
+  const showRead = d.tier3.available;
+  el('published').innerHTML = '<table class="grid"><thead><tr><th>Share</th><th>BDC connection</th><th class="num">Tables</th>' +
+    '<th class="num">No UC key</th><th>Last published</th><th>By</th><th>Source changed</th>' + (showRead ? '<th>Last SAP read</th>' : '') + '</tr></thead><tbody>' +
+    rows.map((r) => {
+      const drift = r.sourceLastAltered && r.lastPublishedAt && Date.parse(r.sourceLastAltered) > Date.parse(r.lastPublishedAt);
+      return '<tr><td class="share-name">' + escHtml(r.shareName) + '</td><td><code>' + escHtml(r.connection) + '</code></td>' +
+        '<td class="num">' + fmtNum(r.tables) + '</td><td class="num">' + fmtNum(r.tablesWithoutPk) + '</td>' +
+        '<td>' + fmtDate(r.lastPublishedAt) + '</td><td>' + escHtml(r.lastPublishedBy || '—') + '</td>' +
+        '<td>' + fmtDate(r.sourceLastAltered) + (drift ? ' <span class="badge starting">after publish</span>' : '') + '</td>' +
+        (showRead ? '<td>' + fmtAgo(r.lastRead) + '</td>' : '') + '</tr>';
+    }).join('') + '</tbody></table>' +
+    (d.tier2.available ? '' : '<div class="muted mt-2">Last published needs the activity log.</div>') +
+    '';
+}
+
+function enableCard(t) {
+  const e = t.enable || {};
+  return '<div class="enable">' + escHtml(e.text || 'Not available.') +
+    (e.href ? ' <a href="' + escHtml(e.href) + '">Open</a>' : '') +
+    (e.sql ? '<pre class="code wrap">' + escHtml(e.sql.join(';\n') + ';') + '</pre>' : '') +
+    (t.error && t.reason === 'error' ? '<div class="muted mt-2">' + escHtml(t.error) + '</div>' : '') + '</div>';
+}
+
+// Stacked daily bars: publish ok, publish failed, unpublish. One axis,
+// recessive grid, legend always shown, hover tooltip per day, table view.
+function renderActivityChart(d) {
+  const t2 = d.tier2;
+  if (!t2.available) { el('activity-chart').innerHTML = enableCard(t2); return; }
+  const days = t2.daily;
+  const series = [['publishOk', 'Published', 'var(--s-ok)'], ['publishFailed', 'Failed', 'var(--s-fail)'], ['unpublish', 'Unpublished', 'var(--s-unpub)']];
+  const totals = days.map((x) => x.publishOk + x.publishFailed + x.unpublish);
+  const max = Math.max(1, ...totals);
+  const W = 560; const H = 180; const padL = 26; const padB = 18; const plotW = W - padL; const plotH = H - padB - 6;
+  const step = plotW / days.length;
+  const bw = Math.max(2, Math.min(18, step - 2));
+  const ticks = niceTicks(max);
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Daily publish and unpublish counts">';
+  ticks.forEach((t) => {
+    const y = 6 + plotH - (t / ticks[ticks.length - 1]) * plotH;
+    svg += '<line class="grid-line" x1="' + padL + '" x2="' + W + '" y1="' + y + '" y2="' + y + '"/>' +
+      '<text class="axis" x="' + (padL - 6) + '" y="' + (y + 3) + '" text-anchor="end">' + t + '</text>';
+  });
+  const top = ticks[ticks.length - 1];
+  days.forEach((day, i) => {
+    const x = padL + i * step + (step - bw) / 2;
+    let y = 6 + plotH;
+    series.forEach(([k, , color], si) => {
+      const v = day[k];
+      if (!v) return;
+      const h = (v / top) * plotH;
+      const gap = si > 0 ? 2 : 0; // surface gap between stacked segments
+      svg += '<rect x="' + x.toFixed(1) + '" y="' + (y - h + gap).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(1, h - gap).toFixed(1) + '" rx="2" fill="' + color + '"/>';
+      y -= h;
+    });
+    svg += '<rect class="hit" data-i="' + i + '" x="' + (padL + i * step).toFixed(1) + '" y="0" width="' + step.toFixed(1) + '" height="' + (H - padB) + '" fill="transparent"/>';
+  });
+  const labelEvery = Math.ceil(days.length / 6);
+  days.forEach((day, i) => {
+    if (i % labelEvery !== 0 && i !== days.length - 1) return;
+    svg += '<text class="axis" x="' + (padL + i * step + step / 2).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="middle">' + day.date.slice(5) + '</text>';
+  });
+  svg += '</svg>';
+  const sum = (k) => days.reduce((a, x) => a + x[k], 0);
+  el('activity-chart').innerHTML = '<div class="chart">' + svg + '<div class="tip" id="tip" hidden></div></div>' +
+    '<div class="legend">' + series.map(([k, label, color]) => '<span style="--c:' + color + '">' + label + ' ' + sum(k) + '</span>').join('') + '</div>' +
+    '<details><summary>Show as table</summary><table class="grid mt-2"><thead><tr><th>Date</th><th>Published</th><th>Failed</th><th>Unpublished</th></tr></thead><tbody>' +
+    days.filter((x) => x.publishOk + x.publishFailed + x.unpublish).map((x) => '<tr><td>' + x.date + '</td><td class="num">' + x.publishOk + '</td><td class="num">' + x.publishFailed + '</td><td class="num">' + x.unpublish + '</td></tr>').join('') +
+    '</tbody></table></details>';
+  const chart = el('activity-chart').querySelector('.chart');
+  const tip = el('tip');
+  chart.querySelectorAll('.hit').forEach((r) => {
+    r.addEventListener('mouseenter', () => {
+      const day = days[Number(r.getAttribute('data-i'))];
+      tip.innerHTML = '<strong>' + day.date + '</strong><br>Published ' + day.publishOk + ' · Failed ' + day.publishFailed + ' · Unpublished ' + day.unpublish;
+      const box = chart.getBoundingClientRect(); const rb = r.getBoundingClientRect();
+      tip.style.left = (rb.left - box.left + rb.width / 2) + 'px';
+      tip.style.top = '20px';
+      tip.hidden = false;
+    });
+    r.addEventListener('mouseleave', () => { tip.hidden = true; });
+  });
+}
+
+function niceTicks(max) {
+  const raw = max / 3;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const stepv = [1, 2, 5, 10].map((m) => m * mag).find((s) => s >= raw) || mag;
+  const out = [];
+  for (let v = 0; v <= max + stepv * 0.999; v += stepv) out.push(Math.round(v));
+  return out.length > 1 ? out : [0, 1];
+}
+
+function hbars(rows, valueKey, labelFn) {
+  const max = Math.max(1, ...rows.map((r) => r[valueKey]));
+  return '<div class="bars-h">' + rows.map((r) =>
+    '<div class="row" title="' + escHtml(r[valueKey]) + '"><div>' + labelFn(r) + '</div><div class="track"><div class="fill" style="width:' + (r[valueKey] / max * 100).toFixed(1) + '%;background:var(--s-ok)"></div></div><div class="num">' + fmtNum(r[valueKey]) + '</div></div>'
+  ).join('') + '</div>';
+}
+
+function renderFailures(d) {
+  const t2 = d.tier2;
+  if (!t2.available) { el('failures').innerHTML = enableCard(t2); el('publishers').innerHTML = ''; return; }
+  el('failures').innerHTML = t2.failuresByReason.length
+    ? hbars(t2.failuresByReason, 'count', (r) => '<a href="' + escHtml(r.faq) + '">' + escHtml(r.label) + '</a>')
+    : '<div class="empty">No failed publishes in the last ' + d.days + ' days.</div>';
+  el('publishers').innerHTML = t2.topPublishers && t2.topPublishers.length
+    ? '<h2 class="mt-4">Top publishers</h2>' + hbars(t2.topPublishers, 'count', (r) => escHtml(r.user))
+    : '';
+  if (t2.needsMigration) {
+    el('failures').innerHTML += '<div class="msg info">The activity table is missing the v2 columns. The table owner can add them on the <a href="/activity.html">Activity page</a>.</div>';
+  }
+}
+
+function renderUsage(d) {
+  const t3 = d.tier3;
+  if (!t3.available) { el('usage').innerHTML = enableCard(t3); return; }
+  if (!t3.byConnection.length) { el('usage').innerHTML = '<div class="empty">No SAP reads in the last ' + d.days + ' days.</div>'; return; }
+  el('usage').innerHTML = '<table class="grid"><thead><tr><th>BDC connection</th><th class="num">Queries</th><th class="num">Rows</th><th class="num">Scanned</th><th>Last read</th></tr></thead><tbody>' +
+    t3.byConnection.map((c) => '<tr><td><code>' + escHtml(c.connection) + '</code></td><td class="num">' + fmtNum(c.queries) + '</td><td class="num">' + fmtNum(c.rows) + '</td><td class="num">' + fmtBytes(c.bytes) + '</td><td>' + fmtAgo(c.lastRead) + '</td></tr>').join('') +
+    '</tbody></table>' +
+    '<details><summary>By share</summary><table class="grid mt-2"><thead><tr><th>Share</th><th>Connection</th><th class="num">Queries</th><th class="num">Scanned</th><th>Last read</th></tr></thead><tbody>' +
+    t3.byShare.map((x) => '<tr><td class="share-name">' + escHtml(x.shareName || '?') + '</td><td><code>' + escHtml(x.connection) + '</code></td><td class="num">' + fmtNum(x.queries) + '</td><td class="num">' + fmtBytes(x.bytes) + '</td><td>' + fmtAgo(x.lastRead) + '</td></tr>').join('') +
+    '</tbody></table></details>' +
+    '<details><summary>Top tables</summary><table class="grid mt-2"><thead><tr><th>Table</th><th>Connection</th><th class="num">Queries</th><th class="num">Scanned</th></tr></thead><tbody>' +
+    t3.byTable.map((t) => '<tr><td><code>' + escHtml(t.table || '?') + '</code></td><td><code>' + escHtml(t.connection) + '</code></td><td class="num">' + fmtNum(t.queries) + '</td><td class="num">' + fmtBytes(t.bytes) + '</td></tr>').join('') +
+    '</tbody></table></details>';
+}
+</script>
+</body>
+</html>

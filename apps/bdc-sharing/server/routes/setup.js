@@ -17,7 +17,10 @@
 import { Router } from 'express';
 import { sqlQuery, executeStatement, spExecuteStatement } from '../dbx.js';
 import { requireRequestUser } from '../auth.js';
-import { getActivityConfig, setActivityTable } from '../config.js';
+import { getActivityConfig, setActivityTable, getActivityTable } from '../config.js';
+import { getActivityColumns, forgetActivityColumns, V2_COLUMNS, noteWarehouse } from '../activity.js';
+import { computeReadiness, forgetReadiness } from '../lib/readiness.js';
+import { createOrUpdateAibi, getAibiStatus } from '../lib/aibi.js';
 import crypto from 'node:crypto';
 
 const router = Router();
@@ -56,8 +59,19 @@ function parseFqTable(table) {
 router.get('/activity-status', async (req, res, next) => {
   try {
     const { table, source } = await getActivityConfig();
+    // Columns added in v2 that an older table is missing. Needs a warehouse
+    // the SP can use; skipped silently otherwise.
+    let missingColumns = [];
+    const warehouseId = String(req.query.warehouseId || '');
+    if (table && warehouseId) {
+      try {
+        const cols = await getActivityColumns(table, warehouseId);
+        missingColumns = V2_COLUMNS.filter((c) => !cols.has(c.name)).map((c) => c.name);
+      } catch { /* SP can't read the table: the Activity page reports that */ }
+    }
     res.json({
       configured: !!table,
+      missingColumns,
       table: table || null,
       source: source || null,
       // SP client ID exposed so the wizard's lockout state can render a
@@ -170,6 +184,7 @@ router.post('/activity', async (req, res, next) => {
           `recipient_name STRING NOT NULL, run_id STRING, warehouse_id STRING, ` +
           `error_code STRING, error_message STRING, metadata_json STRING, ` +
           `app_deployment STRING, ` +
+          `bdc_connection STRING, share_object_count INT, source_last_altered TIMESTAMP, ` +
           `event_date DATE GENERATED ALWAYS AS (CAST(event_time AS DATE))) ` +
           `USING DELTA PARTITIONED BY (event_date)`,
       },
@@ -211,6 +226,7 @@ router.post('/activity', async (req, res, next) => {
       });
     }
     results.push({ name: 'Save app config', status: 'ok' });
+    forgetReadiness();
 
     res.json({
       ok: true,
@@ -326,6 +342,7 @@ router.post('/adopt-activity', async (req, res, next) => {
       });
     }
     probes.push({ name: 'Save app config', status: 'ok' });
+    forgetReadiness();
 
     res.json({
       ok: true,
@@ -333,6 +350,66 @@ router.post('/adopt-activity', async (req, res, next) => {
       source: persisted.source,
       probes,
     });
+  } catch (err) { next(err); }
+});
+
+// GET /api/setup/readiness?warehouseId=…
+// The Setup page checklist. Required items gate publishing.
+router.get('/readiness', async (req, res, next) => {
+  try {
+    const warehouseId = String(req.query.warehouseId || '');
+    if (!warehouseId) { const err = new Error('warehouseId is required'); err.status = 400; throw err; }
+    noteWarehouse(warehouseId);
+    res.json(await computeReadiness(req, warehouseId));
+  } catch (err) { next(err); }
+});
+
+// GET /api/setup/aibi — does the app's AI/BI dashboard exist, is it current?
+router.get('/aibi', async (_req, res, next) => {
+  try { res.json(await getAibiStatus()); } catch (err) { next(err); }
+});
+
+// POST /api/setup/aibi  Body: { warehouseId, shareWith? }
+// Creates (or updates to the shipped version) and publishes the AI/BI
+// dashboard. The caller gets CAN_MANAGE; shareWith (a group) gets CAN_RUN.
+router.post('/aibi', async (req, res, next) => {
+  try {
+    const user = requireRequestUser(req);
+    const { warehouseId, shareWith } = req.body || {};
+    if (!warehouseId) { const err = new Error('warehouseId is required'); err.status = 400; throw err; }
+    if (shareWith && !/^[\w .@-]{1,255}$/.test(shareWith)) { const err = new Error('Invalid group name'); err.status = 400; throw err; }
+    res.json(await createOrUpdateAibi({ warehouseId, userEmail: user.email || user.userName, shareWith: shareWith || null }));
+  } catch (err) { next(err); }
+});
+
+// POST /api/setup/migrate-activity  Body: { warehouseId }
+// Adds the v2 columns to an existing activity table. Runs as the user (OBO),
+// who must own the table or hold MANAGE on it. The SP only has MODIFY.
+router.post('/migrate-activity', async (req, res, next) => {
+  try {
+    requireRequestUser(req);
+    const { warehouseId } = req.body || {};
+    if (!warehouseId) { const err = new Error('warehouseId is required'); err.status = 400; throw err; }
+    const table = await getActivityTable();
+    if (!table) { const err = new Error('Activity log is not configured'); err.status = 400; throw err; }
+    const parts = parseFqTable(table);
+    const fq = `${idQ(parts.catalog)}.${idQ(parts.schema)}.${idQ(parts.table)}`;
+    forgetActivityColumns();
+    const cols = await getActivityColumns(table, warehouseId).catch(() => new Set());
+    const missing = V2_COLUMNS.filter((c) => !cols.has(c.name));
+    if (!missing.length) return res.json({ ok: true, added: [] });
+    const sql = `ALTER TABLE ${fq} ADD COLUMNS (${missing.map((c) => `${c.name} ${c.type}`).join(', ')})`;
+    try {
+      await executeStatement(req, { statement: sql, warehouseId });
+    } catch (e) {
+      return res.status(400).json({
+        ok: false, sql,
+        message: `Could not alter ${table}: ${e.message}. The table owner can run the SQL instead.`,
+      });
+    }
+    forgetActivityColumns();
+    forgetReadiness();
+    res.json({ ok: true, added: missing.map((c) => c.name), sql });
   } catch (err) { next(err); }
 });
 

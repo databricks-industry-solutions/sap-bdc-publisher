@@ -1,6 +1,5 @@
 bundle:
   name: sap_bdc_publisher
-  engine: terraform
 
 variables:
   project_name:

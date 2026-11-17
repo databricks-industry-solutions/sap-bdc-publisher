@@ -12,6 +12,13 @@ import diagRouter from './routes/diag.js';
 import warehousesRouter from './routes/warehouses.js';
 import activityRouter from './routes/activity.js';
 import setupRouter from './routes/setup.js';
+import preflightRouter from './routes/preflight.js';
+import dashboardRouter from './routes/dashboard.js';
+import { startReconciler, reconcileOnce } from './runs.js';
+import { noteWarehouse } from './activity.js';
+import { getSpToken } from './spAuth.js';
+import { getActivityConfig } from './config.js';
+import { getWarehouseSp } from './dbx.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -19,9 +26,40 @@ const PORT = process.env.PORT || 8000;
 
 app.use(express.json({ limit: '1mb' }));
 
-// Health (no auth needed)
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'healthy', app: 'data-sharing' });
+// Remember a warehouse the app can use for background work (run
+// reconciler). Any request that names one is enough.
+app.use((req, _res, next) => {
+  const id = (req.query && req.query.warehouseId) || (req.body && req.body.warehouseId);
+  if (id) noteWarehouse(String(id));
+  next();
+});
+
+// Health. Plain call is a liveness probe. ?deep=true also checks the SP
+// token, the warehouse (if passed) and the activity log config, so the FAQ
+// troubleshooting block can point at the broken piece.
+app.get('/api/health', async (req, res) => {
+  if (String(req.query.deep || '') !== 'true') {
+    return res.json({ status: 'healthy', app: 'data-sharing' });
+  }
+  const checks = [];
+  try { await getSpToken(); checks.push({ check: 'App SP token', ok: true }); }
+  catch (e) { checks.push({ check: 'App SP token', ok: false, message: e.message }); }
+  const wh = String(req.query.warehouseId || '');
+  if (wh) {
+    try {
+      const w = await getWarehouseSp(wh);
+      checks.push({ check: 'App SP can see the warehouse', ok: true, state: w.state });
+    } catch (e) { checks.push({ check: 'App SP can see the warehouse', ok: false, message: e.message }); }
+  }
+  try {
+    const cfg = await getActivityConfig();
+    checks.push({ check: 'Activity log configured', ok: !!cfg.table, table: cfg.table, source: cfg.source });
+  } catch (e) { checks.push({ check: 'Activity log configured', ok: false, message: e.message }); }
+  try {
+    const r = await reconcileOnce();
+    checks.push({ check: 'Run reconciler', ok: true, ...r });
+  } catch (e) { checks.push({ check: 'Run reconciler', ok: false, message: e.message }); }
+  res.json({ status: checks.every((c) => c.ok) ? 'healthy' : 'degraded', checks });
 });
 
 // User-scoped API (OBO)
@@ -35,6 +73,8 @@ app.use('/api/diag', diagRouter);
 app.use('/api/warehouses', warehousesRouter);
 app.use('/api/activity', activityRouter);
 app.use('/api/setup', setupRouter);
+app.use('/api/preflight', preflightRouter);
+app.use('/api/dashboard', dashboardRouter);
 
 // Serve README.md from project root (rendered by public/docs.html).
 app.get('/README.md', (_req, res) => {
@@ -63,4 +103,5 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`Data Sharing app listening on :${PORT}`);
+  startReconciler();
 });
