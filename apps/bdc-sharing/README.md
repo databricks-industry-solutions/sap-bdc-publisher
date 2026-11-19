@@ -242,6 +242,17 @@ shares.
 
 ---
 
+## Data collection
+
+To improve users' experience and this asset's quality, the app reports a
+usage event when a page is opened. This information is captured for product
+improvement only, not for marketing purposes, and doesn't contain PII: the
+email of Databricks users is hashed, and nobody else's is sent. By using this
+asset, you consent to this data collection. If you wish to disable it, set
+the environment variable `DBDEMOS_TRACKER_DISABLED=1` (e.g. in `app.yaml`).
+
+---
+
 ## Contributing
 
 PRs welcome. By submitting a contribution you accept the terms in

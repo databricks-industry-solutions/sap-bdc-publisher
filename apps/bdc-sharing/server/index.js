@@ -19,6 +19,7 @@ import { noteWarehouse } from './activity.js';
 import { getSpToken } from './spAuth.js';
 import { getActivityConfig } from './config.js';
 import { getWarehouseSp } from './dbx.js';
+import { trackView } from './lib/tracker.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -83,6 +84,13 @@ app.get('/README.md', (_req, res) => {
 
 // Serve static frontend
 const publicDir = path.join(__dirname, '..', 'public');
+// Usage tracking on page loads only (not assets or API calls). Not awaited.
+app.use((req, _res, next) => {
+  if (req.method === 'GET' && (req.path === '/' || req.path.endsWith('.html'))) {
+    trackView(req, req.path, process.env.DATABRICKS_WORKSPACE_ID);
+  }
+  next();
+});
 app.use(express.static(publicDir));
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
